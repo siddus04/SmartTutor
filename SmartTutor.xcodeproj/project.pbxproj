@@ -6,6 +6,14 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		3856AD032F2CA37700CC610B /* run-ios-sim.sh in Resources */ = {isa = PBXBuildFile; fileRef = 3856AD022F2CA36D00CC610B /* run-ios-sim.sh */; };
+		3856AD152F2DD47E00CC610B /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3856AD0F2F2CA55500CC610B /* RootView.swift */; };
+		3856AD162F2DD48400CC610B /* SmartTutorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3856AD0E2F2CA53C00CC610B /* SmartTutorApp.swift */; };
+		3856AD172F2DD48900CC610B /* CanvasSandboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3856AD112F2CA57800CC610B /* CanvasSandboxView.swift */; };
+		3856AD182F2DD48E00CC610B /* ExercisesHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3856AD122F2CA71600CC610B /* ExercisesHomeView.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		3856ACE42F2CA2DC00CC610B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +35,11 @@
 		3856ACD62F2CA2DB00CC610B /* SmartTutor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SmartTutor.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3856ACE32F2CA2DC00CC610B /* SmartTutorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SmartTutorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3856ACED2F2CA2DC00CC610B /* SmartTutorUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SmartTutorUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3856AD022F2CA36D00CC610B /* run-ios-sim.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "run-ios-sim.sh"; sourceTree = "<group>"; };
+		3856AD0E2F2CA53C00CC610B /* SmartTutorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartTutorApp.swift; sourceTree = "<group>"; };
+		3856AD0F2F2CA55500CC610B /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		3856AD112F2CA57800CC610B /* CanvasSandboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasSandboxView.swift; sourceTree = "<group>"; };
+		3856AD122F2CA71600CC610B /* ExercisesHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExercisesHomeView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -75,6 +88,10 @@
 		3856ACCD2F2CA2DB00CC610B = {
 			isa = PBXGroup;
 			children = (
+				3856AD0A2F2CA47700CC610B /* Core */,
+				3856AD062F2CA45500CC610B /* Features */,
+				3856AD042F2CA42B00CC610B /* App */,
+				3856AD022F2CA36D00CC610B /* run-ios-sim.sh */,
 				3856ACD82F2CA2DB00CC610B /* SmartTutor */,
 				3856ACE62F2CA2DC00CC610B /* SmartTutorTests */,
 				3856ACF02F2CA2DC00CC610B /* SmartTutorUITests */,
@@ -90,6 +107,79 @@
 				3856ACED2F2CA2DC00CC610B /* SmartTutorUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		3856AD042F2CA42B00CC610B /* App */ = {
+			isa = PBXGroup;
+			children = (
+				3856AD0F2F2CA55500CC610B /* RootView.swift */,
+				3856AD0E2F2CA53C00CC610B /* SmartTutorApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		3856AD062F2CA45500CC610B /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				3856AD092F2CA46E00CC610B /* Chat */,
+				3856AD082F2CA46700CC610B /* Canvas */,
+				3856AD072F2CA45D00CC610B /* Exercises */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		3856AD072F2CA45D00CC610B /* Exercises */ = {
+			isa = PBXGroup;
+			children = (
+				3856AD122F2CA71600CC610B /* ExercisesHomeView.swift */,
+			);
+			path = Exercises;
+			sourceTree = "<group>";
+		};
+		3856AD082F2CA46700CC610B /* Canvas */ = {
+			isa = PBXGroup;
+			children = (
+				3856AD112F2CA57800CC610B /* CanvasSandboxView.swift */,
+			);
+			path = Canvas;
+			sourceTree = "<group>";
+		};
+		3856AD092F2CA46E00CC610B /* Chat */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Chat;
+			sourceTree = "<group>";
+		};
+		3856AD0A2F2CA47700CC610B /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				3856AD0D2F2CA48800CC610B /* Utilities */,
+				3856AD0C2F2CA48200CC610B /* Services */,
+				3856AD0B2F2CA47D00CC610B /* Models */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		3856AD0B2F2CA47D00CC610B /* Models */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		3856AD0C2F2CA48200CC610B /* Services */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		3856AD0D2F2CA48800CC610B /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Utilities;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -212,6 +302,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3856AD032F2CA37700CC610B /* run-ios-sim.sh in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -236,6 +327,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3856AD172F2DD48900CC610B /* CanvasSandboxView.swift in Sources */,
+				3856AD182F2DD48E00CC610B /* ExercisesHomeView.swift in Sources */,
+				3856AD162F2DD48400CC610B /* SmartTutorApp.swift in Sources */,
+				3856AD152F2DD47E00CC610B /* RootView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
