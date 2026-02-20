@@ -12,6 +12,14 @@
 		3856AD162F2DD48400CC610B /* SmartTutorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3856AD0E2F2CA53C00CC610B /* SmartTutorApp.swift */; };
 		3856AD172F2DD48900CC610B /* CanvasSandboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3856AD112F2CA57800CC610B /* CanvasSandboxView.swift */; };
 		3856AD182F2DD48E00CC610B /* ExercisesHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3856AD122F2CA71600CC610B /* ExercisesHomeView.swift */; };
+		38E5B2612F489508004B0B2E /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2602F489508004B0B2E /* AppConfig.swift */; };
+		38E5B2652F48952C004B0B2E /* TriangleModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2642F48952C004B0B2E /* TriangleModels.swift */; };
+		38E5B2662F48952C004B0B2E /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2622F48952C004B0B2E /* ChatMessage.swift */; };
+		38E5B2672F48952C004B0B2E /* TriangleAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2632F48952C004B0B2E /* TriangleAPI.swift */; };
+		38E5B2682F4899B9004B0B2E /* Color+App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2692F4899B9004B0B2E /* Color+App.swift */; };
+		38E5B2892F4899ED004B0B2E /* TriangleDiagramView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2882F4899ED004B0B2E /* TriangleDiagramView.swift */; };
+		38E5B28E2F48ACC0004B0B2E /* TriangleSnapshotter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B28D2F48ACC0004B0B2E /* TriangleSnapshotter.swift */; };
+		38E5B28F2F48ACC0004B0B2E /* TriangleAIChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B28C2F48ACC0004B0B2E /* TriangleAIChecker.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,6 +48,14 @@
 		3856AD0F2F2CA55500CC610B /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		3856AD112F2CA57800CC610B /* CanvasSandboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasSandboxView.swift; sourceTree = "<group>"; };
 		3856AD122F2CA71600CC610B /* ExercisesHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExercisesHomeView.swift; sourceTree = "<group>"; };
+		38E5B2602F489508004B0B2E /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		38E5B2622F48952C004B0B2E /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
+		38E5B2632F48952C004B0B2E /* TriangleAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriangleAPI.swift; sourceTree = "<group>"; };
+		38E5B2642F48952C004B0B2E /* TriangleModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriangleModels.swift; sourceTree = "<group>"; };
+		38E5B2692F4899B9004B0B2E /* Color+App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+App.swift"; sourceTree = "<group>"; };
+		38E5B2882F4899ED004B0B2E /* TriangleDiagramView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriangleDiagramView.swift; sourceTree = "<group>"; };
+		38E5B28C2F48ACC0004B0B2E /* TriangleAIChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriangleAIChecker.swift; sourceTree = "<group>"; };
+		38E5B28D2F48ACC0004B0B2E /* TriangleSnapshotter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriangleSnapshotter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -112,6 +128,8 @@
 		3856AD042F2CA42B00CC610B /* App */ = {
 			isa = PBXGroup;
 			children = (
+				38E5B2602F489508004B0B2E /* AppConfig.swift */,
+				38E5B2692F4899B9004B0B2E /* Color+App.swift */,
 				3856AD0F2F2CA55500CC610B /* RootView.swift */,
 				3856AD0E2F2CA53C00CC610B /* SmartTutorApp.swift */,
 			);
@@ -139,6 +157,12 @@
 		3856AD082F2CA46700CC610B /* Canvas */ = {
 			isa = PBXGroup;
 			children = (
+				38E5B28C2F48ACC0004B0B2E /* TriangleAIChecker.swift */,
+				38E5B28D2F48ACC0004B0B2E /* TriangleSnapshotter.swift */,
+				38E5B2882F4899ED004B0B2E /* TriangleDiagramView.swift */,
+				38E5B2622F48952C004B0B2E /* ChatMessage.swift */,
+				38E5B2632F48952C004B0B2E /* TriangleAPI.swift */,
+				38E5B2642F48952C004B0B2E /* TriangleModels.swift */,
 				3856AD112F2CA57800CC610B /* CanvasSandboxView.swift */,
 			);
 			path = Canvas;
@@ -327,9 +351,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				38E5B2652F48952C004B0B2E /* TriangleModels.swift in Sources */,
+				38E5B2662F48952C004B0B2E /* ChatMessage.swift in Sources */,
+				38E5B2672F48952C004B0B2E /* TriangleAPI.swift in Sources */,
 				3856AD172F2DD48900CC610B /* CanvasSandboxView.swift in Sources */,
+				38E5B2682F4899B9004B0B2E /* Color+App.swift in Sources */,
+				38E5B2612F489508004B0B2E /* AppConfig.swift in Sources */,
 				3856AD182F2DD48E00CC610B /* ExercisesHomeView.swift in Sources */,
+				38E5B28E2F48ACC0004B0B2E /* TriangleSnapshotter.swift in Sources */,
+				38E5B28F2F48ACC0004B0B2E /* TriangleAIChecker.swift in Sources */,
 				3856AD162F2DD48400CC610B /* SmartTutorApp.swift in Sources */,
+				38E5B2892F4899ED004B0B2E /* TriangleDiagramView.swift in Sources */,
 				3856AD152F2DD47E00CC610B /* RootView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

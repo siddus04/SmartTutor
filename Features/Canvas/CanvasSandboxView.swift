@@ -1,8 +1,1105 @@
 import SwiftUI
+import Combine
+#if os(iOS)
+import UIKit
+import PencilKit
+#endif
 
 struct CanvasSandboxView: View {
+    private let accentColor = Color(red: 0.32, green: 0.64, blue: 0.66)
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var latestBase: TriangleBase?
+    @State private var canvasResetID = UUID()
+    @State private var selectedSegment: String?
+    @State private var messages: [ChatMessage] = []
+    @State private var selectionDebugInfo: SelectionDebugInfo?
+    @StateObject private var canvasController = CanvasController()
+
     var body: some View {
-        Text("Canvas Sandbox")
-            .font(.title)
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.92, green: 0.96, blue: 0.98),
+                    Color(red: 0.93, green: 0.97, blue: 0.94),
+                    Color(red: 0.95, green: 0.94, blue: 0.98)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            Group {
+                if #available(iOS 16.0, *) {
+                    NavigationSplitView(columnVisibility: $columnVisibility) {
+                        TutorPane(
+                            accentColor: accentColor,
+                            latestBase: $latestBase,
+                            messages: $messages,
+                            onQuestionLoaded: {
+                                canvasResetID = UUID()
+                                selectedSegment = nil
+                                selectionDebugInfo = nil
+                            }
+                        )
+                            .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 360)
+                    } detail: {
+                        CanvasPane(
+                            accentColor: accentColor,
+                            diagramSpec: latestBase?.diagramSpec,
+                            resetID: canvasResetID,
+                            selectedSegment: selectedSegment,
+                            onSegmentSelected: { segment in
+                                selectedSegment = segment
+                            },
+                            onCheckAnswer: {
+                                handleCheckAnswer()
+                            },
+                            onAmbiguousSelection: {
+                                messages.append(ChatMessage(text: "I can’t tell which side you circled — try circling one side properly.", isAssistant: true))
+                            },
+                            onDebugUpdate: { info in
+                                selectionDebugInfo = info
+                            },
+                            canvasController: canvasController,
+                            debugInfo: selectionDebugInfo
+                        )
+                    }
+                    .navigationSplitViewStyle(.balanced)
+                } else {
+                    HStack(spacing: 0) {
+                        TutorPane(
+                            accentColor: accentColor,
+                            latestBase: $latestBase,
+                            messages: $messages,
+                            onQuestionLoaded: {
+                                canvasResetID = UUID()
+                                selectedSegment = nil
+                                selectionDebugInfo = nil
+                            }
+                        )
+                            .frame(minWidth: 280, idealWidth: 320, maxWidth: 360)
+                        Divider()
+                        CanvasPane(
+                            accentColor: accentColor,
+                            diagramSpec: latestBase?.diagramSpec,
+                            resetID: canvasResetID,
+                            selectedSegment: selectedSegment,
+                            onSegmentSelected: { segment in
+                                selectedSegment = segment
+                            },
+                            onCheckAnswer: {
+                                handleCheckAnswer()
+                            },
+                            onAmbiguousSelection: {
+                                messages.append(ChatMessage(text: "I can’t tell which side you circled — try circling one side properly.", isAssistant: true))
+                            },
+                            onDebugUpdate: { info in
+                                selectionDebugInfo = info
+                            },
+                            canvasController: canvasController,
+                            debugInfo: selectionDebugInfo
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 6)
+        }
+        .onAppear {
+            if messages.isEmpty {
+                messages = [ChatMessage(text: "Tap “New Question” to start.", isAssistant: true)]
+            }
+        }
+    }
+
+    private func handleCheckAnswer() {
+        guard let base = latestBase else {
+            messages.append(ChatMessage(text: "No question to check yet.", isAssistant: true))
+            return
+        }
+        guard let selectedSegment else {
+            messages.append(ChatMessage(text: "Draw a circle around one side first.", isAssistant: true))
+            return
+        }
+        guard let expected = base.answer?.value else {
+            messages.append(ChatMessage(text: "I couldn't verify the answer yet.", isAssistant: true))
+            return
+        }
+        if selectedSegment == expected {
+            messages.append(ChatMessage(text: "Correct — that's the hypotenuse.", isAssistant: true))
+        } else {
+            messages.append(ChatMessage(text: "Not quite. Try again.", isAssistant: true))
+        }
+
+        Task {
+            await runAICheck(base: base, selectedSegment: selectedSegment)
+        }
+    }
+
+    private func runAICheck(base: TriangleBase, selectedSegment: String) async {
+#if os(iOS)
+        guard let canvasView = canvasController.canvasView else {
+            await MainActor.run {
+                messages.append(ChatMessage(text: "No question to check yet.", isAssistant: true))
+            }
+            print("[AICheck] Warning: canvas view unavailable")
+            return
+        }
+        guard let spec = base.diagramSpec else {
+            print("[AICheck] Warning: diagram spec missing")
+            return
+        }
+        guard let snapshots = TriangleSnapshotter.makeSnapshots(canvasView: canvasView, diagramSpec: spec) else {
+            print("[AICheck] Warning: snapshot generation failed")
+            return
+        }
+        let ts = TriangleSnapshotter.timestampString()
+        TriangleSnapshotter.savePNG(data: snapshots.basePNG, filename: "base_\(ts).png")
+        TriangleSnapshotter.savePNG(data: snapshots.inkPNG, filename: "ink_\(ts).png")
+        TriangleSnapshotter.savePNG(data: snapshots.combinedPNG, filename: "combined_\(ts).png")
+
+        let combinedBase64 = snapshots.combinedPNG.base64EncodedString()
+        let checker = TriangleAIChecker()
+        let result = await checker.check(
+            concept: "triangle_hypotenuse",
+            task: "circle_hypotenuse",
+            combinedPNGBase64: combinedBase64
+        )
+        let prefix = result.studentFeedback.hasPrefix("(AI check)") ? "" : "(AI check) "
+        await MainActor.run {
+            messages.append(ChatMessage(text: "\(prefix)\(result.studentFeedback)", isAssistant: true))
+        }
+        print("[AICheck] Deterministic=\(selectedSegment) AI=\(result.detectedSegment ?? "nil") amb=\(String(format: "%.2f", result.ambiguityScore)) conf=\(String(format: "%.2f", result.confidence))")
+#else
+        await MainActor.run {
+            messages.append(ChatMessage(text: "No question to check yet.", isAssistant: true))
+        }
+        print("[AICheck] Warning: AI check unsupported on this platform")
+#endif
+    }
+}
+
+private struct TutorPane: View {
+    @State private var draftMessage = ""
+    @State private var isGenerating = false
+    @State private var didFailToGenerate = false
+    let accentColor: Color
+    @Binding var latestBase: TriangleBase?
+    @Binding var messages: [ChatMessage]
+    let onQuestionLoaded: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            header
+            chatArea
+            inputBar
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 14, x: 0, y: 6)
+        .padding(4)
+    }
+
+    private var header: some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("AI Math Tutor")
+                    .font(.title2.weight(.semibold))
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color.green.opacity(0.6))
+                        .frame(width: 8, height: 8)
+                    Text("Online · Ready to help")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(Color.secondary)
+                }
+            }
+            Spacer()
+            Button(action: {
+                Task { await generateQuestion() }
+            }) {
+                Group {
+                    if isGenerating {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(accentColor)
+                    } else {
+                        Text("New Question")
+                            .font(.callout.weight(.semibold))
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule()
+                        .fill(accentColor.opacity(0.15))
+                )
+            }
+            .foregroundStyle(accentColor)
+            .disabled(isGenerating)
+            .opacity(isGenerating ? 0.6 : 1.0)
+        }
+    }
+
+    private var chatArea: some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                ForEach(messages) { message in
+                    MessageBubble(text: message.text, isAssistant: message.isAssistant)
+                }
+                if didFailToGenerate {
+                    Button(action: {
+                        Task { await generateQuestion() }
+                    }) {
+                        Text("Retry")
+                            .font(.callout.weight(.semibold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                Capsule()
+                                    .fill(accentColor.opacity(0.15))
+                            )
+                    }
+                    .foregroundStyle(accentColor)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.secondary.opacity(0.08))
+        )
+        .frame(maxHeight: .infinity)
+    }
+
+    private var inputBar: some View {
+        HStack(spacing: 10) {
+            GrowingTextEditor(text: $draftMessage, minHeight: 48, maxHeight: 130)
+                .padding(.horizontal, 6)
+            Button(action: {}) {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.secondary)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Circle()
+                            .fill(Color.appBackground)
+                    )
+            }
+            Button(action: {}) {
+                Image(systemName: "paperplane.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Circle()
+                            .fill(accentColor)
+                    )
+            }
+            .disabled(true)
+            .opacity(0.5)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.thinMaterial)
+        )
+    }
+
+    @MainActor
+    private func generateQuestion() async {
+        isGenerating = true
+        didFailToGenerate = false
+        messages = [ChatMessage(text: "Generating a new question...", isAssistant: true)]
+        do {
+            let response = try await TriangleAPI.generateQuestion()
+            messages = response.base.tutorMessages.map {
+                ChatMessage(text: $0.text, isAssistant: $0.role != "user")
+            }
+            latestBase = response.base
+            onQuestionLoaded()
+        } catch {
+            messages = [ChatMessage(text: "I couldn't load a new question. Try again.", isAssistant: true)]
+            didFailToGenerate = true
+        }
+        isGenerating = false
+    }
+}
+
+private struct CanvasPane: View {
+    let accentColor: Color
+    let diagramSpec: TriangleDiagramSpec?
+    let resetID: UUID
+    let selectedSegment: String?
+    let onSegmentSelected: (String?) -> Void
+    let onCheckAnswer: () -> Void
+    let onAmbiguousSelection: () -> Void
+    let onDebugUpdate: (SelectionDebugInfo?) -> Void
+    let canvasController: CanvasController
+    let debugInfo: SelectionDebugInfo?
+
+    var body: some View {
+        VStack(spacing: 6) {
+            CanvasBoard(
+                accentColor: accentColor,
+                diagramSpec: diagramSpec,
+                resetID: resetID,
+                selectedSegment: selectedSegment,
+                onSegmentSelected: onSegmentSelected,
+                onCheckAnswer: onCheckAnswer,
+                onAmbiguousSelection: onAmbiguousSelection,
+                onDebugUpdate: onDebugUpdate,
+                canvasController: canvasController,
+                debugInfo: debugInfo
+            )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .aspectRatio(4.0 / 3.0, contentMode: .fit)
+        }
+        .padding(4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+}
+
+private struct MessageBubble: View {
+    let text: String
+    let isAssistant: Bool
+
+    var body: some View {
+        HStack {
+            if isAssistant {
+                bubble
+                Spacer(minLength: 30)
+            } else {
+                Spacer(minLength: 30)
+                bubble
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var bubble: some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(isAssistant ? Color.primary : Color.white)
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(isAssistant ? Color.secondary.opacity(0.3) : Color.accentColor)
+            )
+            .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
+            .frame(maxWidth: 260, alignment: isAssistant ? .leading : .trailing)
+    }
+}
+
+private struct CanvasBoard: View {
+    let accentColor: Color
+    let diagramSpec: TriangleDiagramSpec?
+    let resetID: UUID
+    let selectedSegment: String?
+    let onSegmentSelected: (String?) -> Void
+    let onCheckAnswer: () -> Void
+    let onAmbiguousSelection: () -> Void
+    let onDebugUpdate: (SelectionDebugInfo?) -> Void
+    let canvasController: CanvasController
+    let debugInfo: SelectionDebugInfo?
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color.appBackground)
+                .shadow(color: Color.black.opacity(0.08), radius: 18, x: 0, y: 10)
+            GridBackground()
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .opacity(0.28)
+            if let diagramSpec {
+                TriangleDiagramView(spec: diagramSpec, selectedSegment: selectedSegment)
+                    .padding(18)
+                    .allowsHitTesting(false)
+            }
+            DrawingLayer(
+                resetID: resetID,
+                diagramSpec: diagramSpec,
+                onSegmentSelected: onSegmentSelected,
+                onAmbiguousSelection: onAmbiguousSelection,
+                onDebugUpdate: onDebugUpdate,
+                canvasController: canvasController
+            )
+            if DebugFlags.showSelectionDebug, let debugInfo {
+                SelectionDebugOverlay(debugInfo: debugInfo)
+                    .padding(18)
+                    .allowsHitTesting(false)
+            }
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+        }
+        .overlay(alignment: .topLeading) {
+            HStack(spacing: 10) {
+                OverlayIconButton(systemName: "arrow.uturn.backward") {
+                    canvasController.undo()
+                }
+                OverlayIconButton(systemName: "arrow.uturn.forward") {
+                    canvasController.redo()
+                }
+            }
+            .padding(14)
+        }
+        .overlay(alignment: .topTrailing) {
+            HStack(spacing: 10) {
+                OverlayPillIconButton(systemName: "lightbulb.fill", tint: accentColor) { }
+                OverlayPillIconButton(systemName: "eraser.fill", tint: Color.secondary) {
+                    canvasController.clear()
+                }
+            }
+            .padding(14)
+        }
+        .overlay(alignment: .bottomLeading) {
+            Button("Check Answer") {
+                onCheckAnswer()
+            }
+                .font(.callout.weight(.medium))
+                .padding(.horizontal, 22)
+                .padding(.vertical, 12)
+                .background(
+                    Capsule()
+                        .fill(accentColor.opacity(0.9))
+                )
+                .foregroundStyle(Color.white)
+                .shadow(color: accentColor.opacity(0.35), radius: 12, x: 0, y: 6)
+                .padding(14)
+        }
+        .overlay(alignment: .bottom) {
+            if UIFlags.showBottomPrompt {
+                Text("Circle the hypotenuse of the triangle")
+                    .font(.subheadline.weight(.semibold))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(.thinMaterial)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Color.black.opacity(0.12), lineWidth: 1)
+                    )
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(2)
+                    .padding(.bottom, 14)
+            }
+        }
+    }
+}
+
+private struct DrawingLayer: View {
+    let resetID: UUID
+    let diagramSpec: TriangleDiagramSpec?
+    let onSegmentSelected: (String?) -> Void
+    let onAmbiguousSelection: () -> Void
+    let onDebugUpdate: (SelectionDebugInfo?) -> Void
+    let canvasController: CanvasController
+
+    var body: some View {
+        ZStack {
+            PKCanvasViewRepresentable(
+                diagramSpec: diagramSpec,
+                onSegmentSelected: onSegmentSelected,
+                onAmbiguousSelection: onAmbiguousSelection,
+                onDebugUpdate: onDebugUpdate,
+                canvasController: canvasController
+            )
+        }
+        .padding(18)
+        .id(resetID)
+    }
+}
+
+#if os(iOS)
+private struct SelectionDebugOverlay: View {
+    let debugInfo: SelectionDebugInfo
+
+    var body: some View {
+        Canvas { context, size in
+            var bboxPath = Path()
+            bboxPath.addRect(debugInfo.loopBoundingBox)
+            context.stroke(bboxPath, with: .color(.red), lineWidth: 1.5)
+
+            let segmentColors: [String: Color] = ["AB": .blue, "BC": .green, "CA": .orange]
+            for sample in debugInfo.segmentSamples {
+                let color = segmentColors[sample.segment] ?? .purple
+                for point in sample.points {
+                    let rect = CGRect(x: point.x - 2, y: point.y - 2, width: 4, height: 4)
+                    context.fill(Path(ellipseIn: rect), with: .color(color))
+                }
+            }
+
+            let label = debugLabelText(debugInfo)
+            let text = Text(label)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.primary)
+            context.draw(text, at: CGPoint(x: size.width - 6, y: 10), anchor: .topTrailing)
+        }
+    }
+
+    private func debugLabelText(_ info: SelectionDebugInfo) -> String {
+        let fractions = info.fractions
+            .map { "\($0.segment)=\(String(format: "%.2f", Double($0.insideFraction)))" }
+            .joined(separator: " ")
+        let selected = info.selectedSegment ?? "none"
+        return "\(fractions) sel=\(selected) amb=\(info.ambiguous) \(info.status)"
+    }
+}
+#else
+private struct SelectionDebugOverlay: View {
+    let debugInfo: SelectionDebugInfo
+    var body: some View { EmptyView() }
+}
+#endif
+
+private struct SelectionDebugInfo {
+    let loopBoundingBox: CGRect
+    let segmentSamples: [(segment: String, points: [CGPoint])]
+    let fractions: [(segment: String, insideFraction: CGFloat)]
+    let selectedSegment: String?
+    let ambiguous: Bool
+    let status: String
+}
+
+#if os(iOS)
+private struct PKCanvasViewRepresentable: UIViewRepresentable {
+    let diagramSpec: TriangleDiagramSpec?
+    let onSegmentSelected: (String?) -> Void
+    let onAmbiguousSelection: () -> Void
+    let onDebugUpdate: (SelectionDebugInfo?) -> Void
+    let canvasController: CanvasController
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            onSegmentSelected: onSegmentSelected,
+            onAmbiguousSelection: onAmbiguousSelection,
+            onDebugUpdate: onDebugUpdate
+        )
+    }
+
+    func makeUIView(context: Context) -> PKCanvasView {
+        let canvasView = PKCanvasView()
+        canvasView.backgroundColor = .clear
+        canvasView.isOpaque = false
+        canvasView.drawingPolicy = .anyInput
+        canvasView.alwaysBounceVertical = false
+        canvasView.alwaysBounceHorizontal = false
+        canvasView.tool = PKInkingTool(.pen, color: .black, width: 5)
+        canvasView.isUserInteractionEnabled = true
+        canvasView.delegate = context.coordinator
+        canvasController.canvasView = canvasView
+        return canvasView
+    }
+
+    func updateUIView(_ uiView: PKCanvasView, context: Context) {
+        context.coordinator.diagramSpec = diagramSpec
+    }
+
+    final class Coordinator: NSObject, PKCanvasViewDelegate {
+        var diagramSpec: TriangleDiagramSpec?
+        let onSegmentSelected: (String?) -> Void
+        let onAmbiguousSelection: () -> Void
+        let onDebugUpdate: (SelectionDebugInfo?) -> Void
+        private var lastSelectionAmbiguous = false
+
+        init(
+            onSegmentSelected: @escaping (String?) -> Void,
+            onAmbiguousSelection: @escaping () -> Void,
+            onDebugUpdate: @escaping (SelectionDebugInfo?) -> Void
+        ) {
+            self.onSegmentSelected = onSegmentSelected
+            self.onAmbiguousSelection = onAmbiguousSelection
+            self.onDebugUpdate = onDebugUpdate
+        }
+
+        func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
+            handleDrawingChange(canvasView)
+        }
+
+        func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
+            handleDrawingChange(canvasView)
+        }
+
+        private func handleDrawingChange(_ canvasView: PKCanvasView) {
+            guard let lastStroke = canvasView.drawing.strokes.last else { return }
+            let path = lastStroke.path
+            let count = path.count
+            guard count > 0 else { return }
+
+            var points: [CGPoint] = []
+            points.reserveCapacity(count)
+            for index in 0..<count {
+                points.append(path[index].location)
+            }
+
+            guard let first = points.first, let last = points.last else { return }
+            let closeDistance = hypot(first.x - last.x, first.y - last.y)
+            let bbox = boundingBox(for: points)
+
+            if count <= 20 {
+                emitDebug(
+                    pointCount: count,
+                    closeDistance: closeDistance,
+                    bbox: bbox,
+                    triangleArea: 0,
+                    areaRatio: 0,
+                    fractions: [],
+                    samples: [],
+                    selected: nil,
+                    ambiguous: false,
+                    status: "reject: not enough points"
+                )
+                onSegmentSelected(nil)
+                lastSelectionAmbiguous = false
+                return
+            }
+
+            let perimeterEstimate = 2 * (bbox.width + bbox.height)
+            let closeThreshold = max(60, perimeterEstimate * 0.15)
+            if closeDistance >= closeThreshold {
+                emitDebug(
+                    pointCount: count,
+                    closeDistance: closeDistance,
+                    bbox: bbox,
+                    triangleArea: 0,
+                    areaRatio: 0,
+                    fractions: [],
+                    samples: [],
+                    selected: nil,
+                    ambiguous: false,
+                    status: "reject: loop not closed"
+                )
+                onSegmentSelected(nil)
+                lastSelectionAmbiguous = false
+                return
+            }
+
+            var minX = CGFloat.greatestFiniteMagnitude
+            var maxX = -CGFloat.greatestFiniteMagnitude
+            var minY = CGFloat.greatestFiniteMagnitude
+            var maxY = -CGFloat.greatestFiniteMagnitude
+            for pt in points {
+                minX = min(minX, pt.x)
+                maxX = max(maxX, pt.x)
+                minY = min(minY, pt.y)
+                maxY = max(maxY, pt.y)
+            }
+            let width = maxX - minX
+            let height = maxY - minY
+            guard width > 40, height > 40 else {
+                emitDebug(
+                    pointCount: count,
+                    closeDistance: closeDistance,
+                    bbox: bbox,
+                    triangleArea: 0,
+                    areaRatio: 0,
+                    fractions: [],
+                    samples: [],
+                    selected: nil,
+                    ambiguous: false,
+                    status: "reject: bbox too small"
+                )
+                onSegmentSelected(nil)
+                lastSelectionAmbiguous = false
+                return
+            }
+            let ratio = width / height
+            guard ratio >= 0.2, ratio <= 5.0 else {
+                emitDebug(
+                    pointCount: count,
+                    closeDistance: closeDistance,
+                    bbox: bbox,
+                    triangleArea: 0,
+                    areaRatio: 0,
+                    fractions: [],
+                    samples: [],
+                    selected: nil,
+                    ambiguous: false,
+                    status: "reject: bbox aspect"
+                )
+                onSegmentSelected(nil)
+                lastSelectionAmbiguous = false
+                return
+            }
+
+            guard let diagramSpec else {
+                emitDebug(
+                    pointCount: count,
+                    closeDistance: closeDistance,
+                    bbox: bbox,
+                    triangleArea: 0,
+                    areaRatio: 0,
+                    fractions: [],
+                    samples: [],
+                    selected: nil,
+                    ambiguous: false,
+                    status: "reject: no diagram"
+                )
+                onSegmentSelected(nil)
+                lastSelectionAmbiguous = false
+                return
+            }
+
+            let triangleBounds = triangleBoundingBox(spec: diagramSpec, in: canvasView.bounds)
+            var areaRatio: CGFloat = 0
+            var triangleArea: CGFloat = 0
+            if triangleBounds.width > 0, triangleBounds.height > 0 {
+                let bboxArea = bbox.width * bbox.height
+                triangleArea = triangleBounds.width * triangleBounds.height
+                areaRatio = triangleArea > 0 ? bboxArea / triangleArea : 0
+            }
+
+            let loopPath = UIBezierPath()
+            if let firstPoint = points.first {
+                loopPath.move(to: firstPoint)
+                for point in points.dropFirst() {
+                    loopPath.addLine(to: point)
+                }
+                loopPath.close()
+            }
+
+            let sampleCount = 15
+            let samples = segmentSamples(spec: diagramSpec, in: canvasView.bounds, count: sampleCount)
+            var fractions: [(segment: String, insideFraction: CGFloat)] = []
+            fractions.reserveCapacity(samples.count)
+            for sample in samples {
+                var insideCount = 0
+                for point in sample.points {
+                    if loopPath.contains(point) {
+                        insideCount += 1
+                    }
+                }
+                let fraction = CGFloat(insideCount) / CGFloat(sampleCount)
+                fractions.append((segment: sample.segment, insideFraction: fraction))
+            }
+
+            guard let maxEntry = fractions.max(by: { $0.insideFraction < $1.insideFraction }) else { return }
+            if maxEntry.insideFraction < 0.2 {
+                emitDebug(
+                    pointCount: count,
+                    closeDistance: closeDistance,
+                    bbox: bbox,
+                    triangleArea: triangleArea,
+                    areaRatio: areaRatio,
+                    fractions: fractions,
+                    samples: samples,
+                    selected: nil,
+                    ambiguous: false,
+                    status: "reject: low coverage"
+                )
+                onSegmentSelected(nil)
+                lastSelectionAmbiguous = false
+                return
+            }
+
+            let sorted = fractions.sorted { $0.insideFraction > $1.insideFraction }
+            if sorted.count >= 2, (sorted[0].insideFraction - sorted[1].insideFraction) <= 0.15 {
+                onSegmentSelected(nil)
+                if !lastSelectionAmbiguous {
+                    onAmbiguousSelection()
+                }
+                lastSelectionAmbiguous = true
+                emitDebug(
+                    pointCount: count,
+                    closeDistance: closeDistance,
+                    bbox: bbox,
+                    triangleArea: triangleArea,
+                    areaRatio: areaRatio,
+                    fractions: fractions,
+                    samples: samples,
+                    selected: nil,
+                    ambiguous: true,
+                    status: "ambiguous"
+                )
+                return
+            }
+
+            onSegmentSelected(maxEntry.segment)
+            lastSelectionAmbiguous = false
+            emitDebug(
+                pointCount: count,
+                closeDistance: closeDistance,
+                bbox: bbox,
+                triangleArea: triangleArea,
+                areaRatio: areaRatio,
+                fractions: fractions,
+                samples: samples,
+                selected: maxEntry.segment,
+                ambiguous: false,
+                status: "selected"
+            )
+        }
+
+        private func segmentSamples(spec: TriangleDiagramSpec, in bounds: CGRect, count: Int) -> [(segment: String, points: [CGPoint])] {
+            let size = bounds.size
+            let padding = min(size.width, size.height) * 0.12
+            let drawSize = CGSize(
+                width: max(size.width - padding * 2, 1),
+                height: max(size.height - padding * 2, 1)
+            )
+            func point(_ key: String) -> CGPoint? {
+                guard let p = spec.points[key] else { return nil }
+                return CGPoint(
+                    x: padding + CGFloat(p.x) * drawSize.width,
+                    y: padding + CGFloat(p.y) * drawSize.height
+                )
+            }
+            return spec.segments.compactMap { segment in
+                let chars = Array(segment)
+                guard chars.count == 2 else { return nil }
+                let aKey = String(chars[0])
+                let bKey = String(chars[1])
+                guard let a = point(aKey), let b = point(bKey) else { return nil }
+                var points: [CGPoint] = []
+                points.reserveCapacity(count)
+                for idx in 0..<count {
+                    let t = CGFloat(idx) / CGFloat(max(count - 1, 1))
+                    let x = a.x + (b.x - a.x) * t
+                    let y = a.y + (b.y - a.y) * t
+                    points.append(CGPoint(x: x, y: y))
+                }
+                return (segment, points)
+            }
+        }
+
+        private func triangleBoundingBox(spec: TriangleDiagramSpec, in bounds: CGRect) -> CGRect {
+            let size = bounds.size
+            let padding = min(size.width, size.height) * 0.12
+            let drawSize = CGSize(
+                width: max(size.width - padding * 2, 1),
+                height: max(size.height - padding * 2, 1)
+            )
+            var minX = CGFloat.greatestFiniteMagnitude
+            var maxX = -CGFloat.greatestFiniteMagnitude
+            var minY = CGFloat.greatestFiniteMagnitude
+            var maxY = -CGFloat.greatestFiniteMagnitude
+            for point in spec.points.values {
+                let x = padding + CGFloat(point.x) * drawSize.width
+                let y = padding + CGFloat(point.y) * drawSize.height
+                minX = min(minX, x)
+                maxX = max(maxX, x)
+                minY = min(minY, y)
+                maxY = max(maxY, y)
+            }
+            if minX == CGFloat.greatestFiniteMagnitude {
+                return .zero
+            }
+            return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        }
+
+        private func boundingBox(for points: [CGPoint]) -> CGRect {
+            var minX = CGFloat.greatestFiniteMagnitude
+            var maxX = -CGFloat.greatestFiniteMagnitude
+            var minY = CGFloat.greatestFiniteMagnitude
+            var maxY = -CGFloat.greatestFiniteMagnitude
+            for point in points {
+                minX = min(minX, point.x)
+                maxX = max(maxX, point.x)
+                minY = min(minY, point.y)
+                maxY = max(maxY, point.y)
+            }
+            if minX == CGFloat.greatestFiniteMagnitude {
+                return .zero
+            }
+            return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        }
+
+        private func emitDebug(
+            pointCount: Int,
+            closeDistance: CGFloat,
+            bbox: CGRect,
+            triangleArea: CGFloat,
+            areaRatio: CGFloat,
+            fractions: [(segment: String, insideFraction: CGFloat)],
+            samples: [(segment: String, points: [CGPoint])],
+            selected: String?,
+            ambiguous: Bool,
+            status: String
+        ) {
+            let fractionText = fractions
+                .map { "\($0.segment)=\(String(format: "%.2f", Double($0.insideFraction)))" }
+                .joined(separator: " ")
+            let selectedText = selected ?? "nil"
+            print("""
+            [CircleSelect] points=\(pointCount) close=\(String(format: "%.2f", Double(closeDistance))) bbox=(\(String(format: "%.1f", Double(bbox.minX))),\(String(format: "%.1f", Double(bbox.minY))),\(String(format: "%.1f", Double(bbox.width))),\(String(format: "%.1f", Double(bbox.height)))) triangleArea=\(String(format: "%.1f", Double(triangleArea))) areaRatio=\(String(format: "%.2f", Double(areaRatio))) fractions=\(fractionText) selected=\(selectedText) ambiguous=\(ambiguous) status=\(status)
+            """)
+            onDebugUpdate(
+                SelectionDebugInfo(
+                    loopBoundingBox: bbox,
+                    segmentSamples: samples,
+                    fractions: fractions,
+                    selectedSegment: selected,
+                    ambiguous: ambiguous,
+                    status: status
+                )
+            )
+        }
+    }
+}
+#else
+private struct PKCanvasViewRepresentable: View {
+    let diagramSpec: TriangleDiagramSpec?
+    let onSegmentSelected: (String?) -> Void
+    let onAmbiguousSelection: () -> Void
+    let onDebugUpdate: (SelectionDebugInfo?) -> Void
+    let canvasController: CanvasController
+
+    var body: some View {
+        Color.clear
+    }
+}
+#endif
+
+#if os(iOS)
+private final class CanvasController: ObservableObject {
+    weak var canvasView: PKCanvasView?
+
+    func undo() {
+        canvasView?.undoManager?.undo()
+    }
+
+    func redo() {
+        canvasView?.undoManager?.redo()
+    }
+
+    func clear() {
+        canvasView?.drawing = PKDrawing()
+    }
+}
+#else
+private final class CanvasController: ObservableObject {
+    weak var canvasView: AnyObject?
+    func undo() {}
+    func redo() {}
+    func clear() {}
+}
+#endif
+
+private struct OverlayIconButton: View {
+    let systemName: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color.primary)
+                .frame(width: 42, height: 42)
+                .background(
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                )
+                .overlay(
+                    Circle()
+                        .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                )
+        }
+    }
+}
+
+private struct OverlayPillIconButton: View {
+    let systemName: String
+    let tint: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 52, height: 44)
+                .background(
+                    Capsule()
+                        .fill(.ultraThinMaterial)
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                )
+        }
+    }
+}
+
+private struct GrowingTextEditor: View {
+    @Binding var text: String
+    let minHeight: CGFloat
+    let maxHeight: CGFloat
+    @State private var measuredHeight: CGFloat = 48
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            if text.isEmpty {
+                Text("Type a message")
+                    .font(.callout)
+                    .foregroundStyle(Color.secondary.opacity(0.6))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+            }
+            TextEditor(text: $text)
+                .font(.callout)
+                .frame(height: min(max(measuredHeight, minHeight), maxHeight))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.appBackground)
+                    )
+                .scrollContentBackground(.hidden)
+                .overlay(
+                    Text(text.isEmpty ? " " : text)
+                        .font(.callout)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(
+                            GeometryReader { proxy in
+                                Color.clear
+                                    .preference(key: TextHeightPreferenceKey.self, value: proxy.size.height)
+                            }
+                        )
+                        .hidden()
+                )
+        }
+        .onPreferenceChange(TextHeightPreferenceKey.self) { value in
+            measuredHeight = value
+        }
+    }
+}
+
+private struct TextHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 48
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct GridBackground: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            Path { path in
+                let spacing: CGFloat = 24
+                var x: CGFloat = 0
+                while x <= size.width {
+                    path.move(to: CGPoint(x: x, y: 0))
+                    path.addLine(to: CGPoint(x: x, y: size.height))
+                    x += spacing
+                }
+                var y: CGFloat = 0
+                while y <= size.height {
+                    path.move(to: CGPoint(x: 0, y: y))
+                    path.addLine(to: CGPoint(x: size.width, y: y))
+                    y += spacing
+                }
+            }
+            .stroke(Color.black.opacity(0.12), lineWidth: 0.5)
+        }
     }
 }
