@@ -115,7 +115,11 @@ export async function POST(request: Request) {
     }
 
     return jsonResponse(parsed, 200);
-  } catch {
+  } catch (err: unknown) {
+    console.error("OpenAI error:", err);
+    if (err && typeof err === "object" && "response" in err) {
+      console.error("OpenAI error response:", (err as { response?: unknown }).response);
+    }
     return jsonResponse(ERROR_AI_FAILED, 200);
   }
 }

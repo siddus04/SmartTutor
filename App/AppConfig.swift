@@ -7,6 +7,8 @@ enum AppConfig {
         }
         return "http://localhost:8000"
     }()
+
+    static let aiCheckBaseURL: String = "https://smart-tutor-chi.vercel.app/"
 }
 
 enum UIFlags {

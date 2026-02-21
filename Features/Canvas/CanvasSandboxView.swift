@@ -160,14 +160,19 @@ struct CanvasSandboxView: View {
 
         let combinedBase64 = snapshots.combinedPNG.base64EncodedString()
         let checker = TriangleAIChecker()
-        let result = await checker.check(
+        let envelope = await checker.check(
             concept: "triangle_hypotenuse",
             task: "circle_hypotenuse",
+            rightAngleAt: base.diagramSpec?.rightAngleAt,
             combinedPNGBase64: combinedBase64
         )
+        let result = envelope.result
         let prefix = result.studentFeedback.hasPrefix("(AI check)") ? "" : "(AI check) "
         await MainActor.run {
             messages.append(ChatMessage(text: "\(prefix)\(result.studentFeedback)", isAssistant: true))
+        }
+        if let status = envelope.statusCode {
+            print("[AICheck] HTTP \(status)")
         }
         print("[AICheck] Deterministic=\(selectedSegment) AI=\(result.detectedSegment ?? "nil") amb=\(String(format: "%.2f", result.ambiguityScore)) conf=\(String(format: "%.2f", result.confidence))")
 #else
