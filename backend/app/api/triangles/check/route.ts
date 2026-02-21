@@ -13,11 +13,6 @@ Hard rules:
 - You must determine detected_segment ONLY from the ink on the image.
 - Do NOT assume the student circled the correct answer.
 - Report what was circled even if incorrect.
-- student_feedback must be consistent with detected_segment and expected_answer_segment.
-- If detected_segment is wrong, provide a hint but do NOT give the answer directly.
-- Never reveal the correct side explicitly, even if you know expected_answer_segment.
-- If ambiguous (detected_segment = null or ambiguity_score >= 0.6), ask to re-circle just ONE side clearly.
-- If detected_segment equals expected_answer_segment, give positive feedback and include one brief, memorable fact about the concept.
 
 Determine:
 - "detected_segment": which side the student circled ("AB", "BC", "CA"), or null if you cannot confidently determine a single side.
@@ -43,6 +38,28 @@ Output must be strictly JSON with this exact object shape and nothing else:
   "ambiguity_score": number,
   "confidence": number,
   "reason_codes": [string],
+  "student_feedback": string
+}`;
+
+const FEEDBACK_PROMPT = `You are SmartTutor’s AI geometry tutor.
+
+You will be given:
+- detected_segment: which side the student circled (or null).
+- expected_answer_segment: the correct side.
+- ambiguity_score.
+- task/context about the triangle (right angle at A/B/C or null).
+
+Write a single short feedback message for a Grade 4–6 student.
+
+Rules:
+- If detected_segment is null OR ambiguity_score >= 0.6: ask the student to re-circle just ONE side clearly.
+- If detected_segment is wrong: give a helpful hint, but DO NOT reveal the correct side explicitly.
+- If detected_segment is correct: praise briefly and include one short memorable fact.
+- Never reveal the correct side label directly if the student was wrong.
+- Keep it concise.
+
+Return ONLY strict JSON:
+{
   "student_feedback": string
 }`;
 
@@ -99,14 +116,14 @@ export async function POST(request: Request) {
   const combinedBase64 = body.combined_png_base64 ?? "";
   const expectedAnswerSegment = body.expected_answer_segment ?? "AB";
 
-  const header = `Concept: ${concept}\nTask: ${task}\nRightAngleAt: ${rightAngleAt ?? "null"}\nExpectedAnswerSegment: ${expectedAnswerSegment}`;
+  const header = `Concept: ${concept}\nTask: ${task}\nRightAngleAt: ${rightAngleAt ?? "null"}`;
   const fullPrompt = `${header}\n\n${PROMPT}`;
   const imageHash = crypto.createHash("sha256").update(combinedBase64).digest("hex").slice(0, 12);
   console.log(`AI check request hash=${imageHash}`);
 
   try {
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await client.responses.create({
+    const detectResponse = await client.responses.create({
       model: "gpt-4.1",
       input: [
         {
@@ -123,14 +140,20 @@ export async function POST(request: Request) {
       ]
     });
 
-    const text = response.output_text || "";
-    const parsed = safeParseJson(text);
+    const detectText = detectResponse.output_text || "";
+    const parsed = safeParseJson(detectText);
     if (!parsed) {
       return jsonResponse(ERROR_AI_FAILED, 200);
     }
 
     const validated = validateResponse(parsed, expectedAnswerSegment);
-    return jsonResponse(validated, 200);
+    const feedback = await generateFeedback(client, validated, expectedAnswerSegment);
+    const finalResponse = {
+      ...validated,
+      student_feedback: feedback
+    };
+
+    return jsonResponse(finalResponse, 200);
   } catch (err: unknown) {
     console.error("OpenAI error:", err);
     if (err && typeof err === "object" && "response" in err) {
@@ -153,37 +176,12 @@ function validateResponse(parsed: any, expected: "AB" | "BC" | "CA") {
   const ambiguity = typeof parsed?.ambiguity_score === "number" ? parsed.ambiguity_score : 1;
   const confidence = typeof parsed?.confidence === "number" ? parsed.confidence : 0;
   const reasonCodes = Array.isArray(parsed?.reason_codes) ? parsed.reason_codes : ["OTHER"];
-  let feedback = typeof parsed?.student_feedback === "string" ? parsed.student_feedback : "";
 
   let finalDetected = detected;
   let overridden = false;
 
   if (ambiguity >= 0.6) {
     finalDetected = null;
-  }
-
-  if (!finalDetected) {
-    const lower = feedback.toLowerCase();
-    if (!lower.includes("circle") && !lower.includes("circled")) {
-      feedback = "I can’t tell which side you circled—try circling just ONE side clearly.";
-      overridden = true;
-    }
-  } else {
-    const lower = feedback.toLowerCase();
-    if (finalDetected === expected) {
-      const looksNegative = lower.includes("try") || lower.includes("not quite") || lower.includes("make sure") || lower.includes("re-circle") || lower.includes("recircle");
-      const hasPositive = lower.includes("good") || lower.includes("great") || lower.includes("nice") || lower.includes("correct") || lower.includes("well done");
-      if (looksNegative || !hasPositive) {
-        feedback = "Good job! The hypotenuse is always the longest side, opposite the right angle.";
-        overridden = true;
-      }
-    } else {
-      const looksPositive = lower.includes("good job") || lower.includes("correct") || lower.includes("well done");
-      if (looksPositive || !lower.includes("opposite")) {
-        feedback = "Good try. Make sure you circle the side opposite the right angle.";
-        overridden = true;
-      }
-    }
   }
 
   console.log(
@@ -195,7 +193,7 @@ function validateResponse(parsed: any, expected: "AB" | "BC" | "CA") {
     ambiguity_score: ambiguity,
     confidence,
     reason_codes: reasonCodes,
-    student_feedback: feedback
+    student_feedback: ""
   };
 }
 
@@ -209,4 +207,47 @@ function jsonResponse(payload: unknown, status: number) {
       ...CORS_HEADERS
     }
   });
+}
+
+async function generateFeedback(
+  client: OpenAI,
+  validated: { detected_segment: string | null; ambiguity_score: number },
+  expected: "AB" | "BC" | "CA"
+) {
+  try {
+    const payload = {
+      detected_segment: validated.detected_segment,
+      expected_answer_segment: expected,
+      ambiguity_score: validated.ambiguity_score
+    };
+
+    const response = await client.responses.create({
+      model: "gpt-4.1-mini",
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: FEEDBACK_PROMPT },
+            { type: "input_text", text: JSON.stringify(payload) }
+          ]
+        }
+      ]
+    });
+
+    const text = response.output_text || "";
+    const parsed = safeParseJson(text);
+    if (parsed && typeof parsed.student_feedback === "string") {
+      return parsed.student_feedback;
+    }
+  } catch (err) {
+    console.error("OpenAI feedback error:", err);
+  }
+
+  if (validated.detected_segment == null || validated.ambiguity_score >= 0.6) {
+    return "I can’t tell which side you circled—try circling just ONE side clearly.";
+  }
+  if (validated.detected_segment !== expected) {
+    return "Good try. Make sure you circle the side opposite the right angle.";
+  }
+  return "Good job! The hypotenuse is always the longest side, opposite the right angle.";
 }
