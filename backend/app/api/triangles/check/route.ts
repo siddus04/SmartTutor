@@ -17,6 +17,7 @@ Hard rules:
 - If detected_segment is wrong, provide a hint but do NOT give the answer directly.
 - Never reveal the correct side explicitly, even if you know expected_answer_segment.
 - If ambiguous (detected_segment = null or ambiguity_score >= 0.6), ask to re-circle just ONE side clearly.
+- If detected_segment equals expected_answer_segment, give positive feedback and include one brief, memorable fact about the concept.
 
 Determine:
 - "detected_segment": which side the student circled ("AB", "BC", "CA"), or null if you cannot confidently determine a single side.
@@ -169,13 +170,19 @@ function validateResponse(parsed: any, expected: "AB" | "BC" | "CA") {
     }
   } else {
     const lower = feedback.toLowerCase();
-    if (!lower.includes(finalDetected.toLowerCase())) {
-      if (finalDetected === expected) {
-        feedback = `Correct — you circled ${finalDetected}.`;
-      } else {
-        feedback = `Not quite. You circled ${finalDetected}. Try circling ${expected}.`;
+    if (finalDetected === expected) {
+      const looksNegative = lower.includes("try") || lower.includes("not quite") || lower.includes("make sure") || lower.includes("re-circle") || lower.includes("recircle");
+      const hasPositive = lower.includes("good") || lower.includes("great") || lower.includes("nice") || lower.includes("correct") || lower.includes("well done");
+      if (looksNegative || !hasPositive) {
+        feedback = "Good job! The hypotenuse is always the longest side, opposite the right angle.";
+        overridden = true;
       }
-      overridden = true;
+    } else {
+      const looksPositive = lower.includes("good job") || lower.includes("correct") || lower.includes("well done");
+      if (looksPositive || !lower.includes("opposite")) {
+        feedback = "Good try. Make sure you circle the side opposite the right angle.";
+        overridden = true;
+      }
     }
   }
 
