@@ -17,4 +17,5 @@ enum UIFlags {
 
 enum DebugFlags {
     static let showSelectionDebug = true
+    static let showLogOverlay = true
 }

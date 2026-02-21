@@ -31,15 +31,18 @@ struct TriangleSnapshotter {
         return formatter.string(from: Date())
     }
 
-    static func savePNG(data: Data, filename: String) {
+    @discardableResult
+    static func savePNG(data: Data, filename: String) -> String? {
         let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         let url = directory.appendingPathComponent(filename)
         do {
             try data.write(to: url)
             print("[AICheck] Saved \(filename) to \(url.path)")
+            return url.path
         } catch {
             print("[AICheck] Failed to save \(filename): \(error)")
+            return nil
         }
     }
 
@@ -181,6 +184,7 @@ struct TriangleSnapshotter {
 
     static func makeSnapshots(canvasView: AnyObject, diagramSpec: TriangleDiagramSpec) -> Snapshots? { nil }
     static func timestampString() -> String { "" }
-    static func savePNG(data: Data, filename: String) {}
+    @discardableResult
+    static func savePNG(data: Data, filename: String) -> String? { nil }
 }
 #endif

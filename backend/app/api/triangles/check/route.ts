@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import crypto from "crypto";
 
 const PROMPT = `You are SmartTutor’s AI geometry checker.
 
@@ -99,11 +100,13 @@ export async function POST(request: Request) {
 
   const header = `Concept: ${concept}\nTask: ${task}\nRightAngleAt: ${rightAngleAt ?? "null"}\nExpectedAnswerSegment: ${expectedAnswerSegment}`;
   const fullPrompt = `${header}\n\n${PROMPT}`;
+  const imageHash = crypto.createHash("sha256").update(combinedBase64).digest("hex").slice(0, 12);
+  console.log(`AI check request hash=${imageHash}`);
 
   try {
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const response = await client.responses.create({
-      model: "gpt-4.1-mini",
+      model: "gpt-4.1",
       input: [
         {
           role: "user",
@@ -112,7 +115,7 @@ export async function POST(request: Request) {
             {
               type: "input_image",
               image_url: `data:image/png;base64,${combinedBase64}`,
-              detail: "auto"
+              detail: "high"
             }
           ]
         }

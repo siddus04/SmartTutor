@@ -17,6 +17,8 @@ struct CanvasSandboxView: View {
     @State private var isCheckingAI = false
     @State private var thinkingMessageID: UUID?
     @State private var thinkingTask: Task<Void, Never>?
+    @State private var debugLog: String = ""
+    @State private var isLogExpanded = false
 
     var body: some View {
         ZStack {
@@ -110,6 +112,20 @@ struct CanvasSandboxView: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 6)
         }
+        .overlay(alignment: .bottomTrailing) {
+            if DebugFlags.showLogOverlay {
+                LogOverlay(
+                    logText: debugLog,
+                    isExpanded: $isLogExpanded,
+                    onCopy: {
+                        #if os(iOS)
+                        UIPasteboard.general.string = debugLog
+                        #endif
+                    }
+                )
+                .padding(10)
+            }
+        }
         .onAppear {
             if messages.isEmpty {
                 messages = [ChatMessage(text: "Tap “New Question” to start.", isAssistant: true)]
@@ -146,6 +162,7 @@ struct CanvasSandboxView: View {
                     messages.append(ChatMessage(text: "(AI check failed) Please try again.", isAssistant: true))
                     isCheckingAI = false
                 }
+                appendLog("AI check failed or fallback used.")
                 return
             }
 
@@ -157,18 +174,26 @@ struct CanvasSandboxView: View {
                 let followUp = detected == expected ? "✅ Correct" : "❌ Try again"
                 await MainActor.run {
                     messages.append(ChatMessage(text: followUp, isAssistant: true))
+                    if detected != expected {
+                        canvasController.clear()
+                        selectedSegment = nil
+                    }
                 }
             } else {
                 await MainActor.run {
                     messages.append(ChatMessage(text: "I can’t tell which side you circled—try circling just ONE side clearly.", isAssistant: true))
+                    canvasController.clear()
+                    selectedSegment = nil
                 }
             }
 
             if let status = envelope.statusCode {
                 print("[AICheck] HTTP \(status)")
+                appendLog("HTTP \(status)")
             }
             let deterministic = selectedSegment ?? "nil"
             print("[AICheck] Deterministic=\(deterministic) AI=\(result.detectedSegment ?? "nil") amb=\(String(format: "%.2f", result.ambiguityScore)) conf=\(String(format: "%.2f", result.confidence))")
+            appendLog("Deterministic=\(deterministic) AI=\(result.detectedSegment ?? "nil") amb=\(String(format: "%.2f", result.ambiguityScore)) conf=\(String(format: "%.2f", result.confidence))")
 
             await MainActor.run {
                 isCheckingAI = false
@@ -191,9 +216,12 @@ struct CanvasSandboxView: View {
             return nil
         }
         let ts = TriangleSnapshotter.timestampString()
-        TriangleSnapshotter.savePNG(data: snapshots.basePNG, filename: "base_\(ts).png")
-        TriangleSnapshotter.savePNG(data: snapshots.inkPNG, filename: "ink_\(ts).png")
-        TriangleSnapshotter.savePNG(data: snapshots.combinedPNG, filename: "combined_\(ts).png")
+        let basePath = TriangleSnapshotter.savePNG(data: snapshots.basePNG, filename: "base_\(ts).png")
+        let inkPath = TriangleSnapshotter.savePNG(data: snapshots.inkPNG, filename: "ink_\(ts).png")
+        let combinedPath = TriangleSnapshotter.savePNG(data: snapshots.combinedPNG, filename: "combined_\(ts).png")
+        appendLog("Snapshot base: \(basePath ?? "nil")")
+        appendLog("Snapshot ink: \(inkPath ?? "nil")")
+        appendLog("Snapshot combined: \(combinedPath ?? "nil")")
 
         let combinedBase64 = snapshots.combinedPNG.base64EncodedString()
         let checker = TriangleAIChecker()
@@ -267,6 +295,18 @@ struct CanvasSandboxView: View {
             try? await Task.sleep(nanoseconds: perChar)
         }
     }
+
+    private func appendLog(_ line: String) {
+        Task { @MainActor in
+            let timestamp = TriangleSnapshotter.timestampString()
+            let entry = "[\(timestamp)] \(line)"
+            if debugLog.isEmpty {
+                debugLog = entry
+            } else {
+                debugLog.append("\n\(entry)")
+            }
+        }
+    }
 }
 
 private struct TutorPane: View {
@@ -336,35 +376,44 @@ private struct TutorPane: View {
     }
 
     private var chatArea: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                ForEach(messages) { message in
-                    MessageBubble(text: message.text, isAssistant: message.isAssistant)
-                }
-                if didFailToGenerate {
-                    Button(action: {
-                        Task { await generateQuestion() }
-                    }) {
-                        Text("Retry")
-                            .font(.callout.weight(.semibold))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(
-                                Capsule()
-                                    .fill(accentColor.opacity(0.15))
-                            )
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 14) {
+                    ForEach(messages) { message in
+                        MessageBubble(text: message.text, isAssistant: message.isAssistant)
+                            .id(message.id)
                     }
-                    .foregroundStyle(accentColor)
+                    if didFailToGenerate {
+                        Button(action: {
+                            Task { await generateQuestion() }
+                        }) {
+                            Text("Retry")
+                                .font(.callout.weight(.semibold))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule()
+                                        .fill(accentColor.opacity(0.15))
+                                )
+                        }
+                        .foregroundStyle(accentColor)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.secondary.opacity(0.08))
+            )
+            .frame(maxHeight: .infinity)
+            .onChange(of: messages.count) { _ in
+                guard let lastID = messages.last?.id else { return }
+                withAnimation(.easeOut(duration: 0.2)) {
+                    proxy.scrollTo(lastID, anchor: .bottom)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.secondary.opacity(0.08))
-        )
-        .frame(maxHeight: .infinity)
     }
 
     private var inputBar: some View {
@@ -1120,6 +1169,58 @@ private struct OverlayPillIconButton: View {
                         .stroke(Color.black.opacity(0.08), lineWidth: 1)
                 )
         }
+    }
+}
+
+private struct LogOverlay: View {
+    let logText: String
+    @Binding var isExpanded: Bool
+    let onCopy: () -> Void
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Logs")
+                            .font(.footnote.weight(.semibold))
+                        Spacer()
+                        Button("Copy") {
+                            onCopy()
+                        }
+                        .font(.footnote.weight(.semibold))
+                    }
+                    TextEditor(text: .constant(logText))
+                        .font(.system(size: 11, weight: .regular, design: .monospaced))
+                        .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 240)
+                        .background(Color.black.opacity(0.05))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .background(.thinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                )
+            }
+
+            Button(isExpanded ? "Hide Logs" : "Show Logs") {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            }
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                Capsule()
+                    .fill(Color.black.opacity(0.08))
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 4)
     }
 }
 

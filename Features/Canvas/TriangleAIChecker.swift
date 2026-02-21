@@ -37,6 +37,7 @@ final class TriangleAIChecker {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         let payload: [String: Any?] = [
             "concept": concept,
             "task": task,
