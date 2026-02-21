@@ -20,6 +20,7 @@ final class TriangleAIChecker {
     struct ResultEnvelope {
         let result: TriangleAICheckResult
         let statusCode: Int?
+        let didFallback: Bool
     }
 
     func check(
@@ -29,7 +30,7 @@ final class TriangleAIChecker {
         combinedPNGBase64: String
     ) async -> ResultEnvelope {
         guard let url = URL(string: AppConfig.aiCheckBaseURL + "api/triangles/check") else {
-            return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: nil)
+            return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: nil, didFallback: true)
         }
 
         var request = URLRequest(url: url)
@@ -47,11 +48,11 @@ final class TriangleAIChecker {
             let (data, response) = try await URLSession.shared.data(for: request)
             let statusCode = (response as? HTTPURLResponse)?.statusCode
             if let decoded = try? JSONDecoder().decode(TriangleAICheckResult.self, from: data) {
-                return ResultEnvelope(result: decoded, statusCode: statusCode)
+                return ResultEnvelope(result: decoded, statusCode: statusCode, didFallback: false)
             }
-            return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: statusCode)
+            return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: statusCode, didFallback: true)
         } catch {
-            return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: nil)
+            return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: nil, didFallback: true)
         }
     }
 

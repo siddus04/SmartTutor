@@ -14,6 +14,9 @@ struct CanvasSandboxView: View {
     @State private var messages: [ChatMessage] = []
     @State private var selectionDebugInfo: SelectionDebugInfo?
     @StateObject private var canvasController = CanvasController()
+    @State private var isCheckingAI = false
+    @State private var thinkingMessageID: UUID?
+    @State private var thinkingTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -61,6 +64,7 @@ struct CanvasSandboxView: View {
                                 selectionDebugInfo = info
                             },
                             canvasController: canvasController,
+                            isCheckingAI: isCheckingAI,
                             debugInfo: selectionDebugInfo
                         )
                     }
@@ -97,6 +101,7 @@ struct CanvasSandboxView: View {
                                 selectionDebugInfo = info
                             },
                             canvasController: canvasController,
+                            isCheckingAI: isCheckingAI,
                             debugInfo: selectionDebugInfo
                         )
                     }
@@ -113,45 +118,77 @@ struct CanvasSandboxView: View {
     }
 
     private func handleCheckAnswer() {
+        guard !isCheckingAI else { return }
         guard let base = latestBase else {
             messages.append(ChatMessage(text: "No question to check yet.", isAssistant: true))
             return
         }
-        guard let selectedSegment else {
-            messages.append(ChatMessage(text: "Draw a circle around one side first.", isAssistant: true))
+        if canvasController.canvasView == nil {
+            messages.append(ChatMessage(text: "No question to check yet.", isAssistant: true))
             return
         }
-        guard let expected = base.answer?.value else {
-            messages.append(ChatMessage(text: "I couldn't verify the answer yet.", isAssistant: true))
-            return
-        }
-        if selectedSegment == expected {
-            messages.append(ChatMessage(text: "Correct — that's the hypotenuse.", isAssistant: true))
-        } else {
-            messages.append(ChatMessage(text: "Not quite. Try again.", isAssistant: true))
-        }
+        isCheckingAI = true
+
+        let thinking = ChatMessage(text: "Thinking.", isAssistant: true)
+        thinkingMessageID = thinking.id
+        messages.append(thinking)
+        startThinkingAnimation()
 
         Task {
-            await runAICheck(base: base, selectedSegment: selectedSegment)
+            let envelope = await runAICheck(base: base)
+            await MainActor.run {
+                stopThinkingAnimation()
+                removeThinkingMessage()
+            }
+
+            guard let envelope, !envelope.didFallback else {
+                await MainActor.run {
+                    messages.append(ChatMessage(text: "(AI check failed) Please try again.", isAssistant: true))
+                    isCheckingAI = false
+                }
+                return
+            }
+
+            let result = envelope.result
+            await streamAssistantMessage(result.studentFeedback)
+
+            if let detected = result.detectedSegment, result.ambiguityScore < 0.6 {
+                let expected = base.answer?.value ?? "AB"
+                let followUp = detected == expected ? "✅ Correct" : "❌ Try again"
+                await MainActor.run {
+                    messages.append(ChatMessage(text: followUp, isAssistant: true))
+                }
+            } else {
+                await MainActor.run {
+                    messages.append(ChatMessage(text: "I can’t tell which side you circled—try circling just ONE side clearly.", isAssistant: true))
+                }
+            }
+
+            if let status = envelope.statusCode {
+                print("[AICheck] HTTP \(status)")
+            }
+            let deterministic = selectedSegment ?? "nil"
+            print("[AICheck] Deterministic=\(deterministic) AI=\(result.detectedSegment ?? "nil") amb=\(String(format: "%.2f", result.ambiguityScore)) conf=\(String(format: "%.2f", result.confidence))")
+
+            await MainActor.run {
+                isCheckingAI = false
+            }
         }
     }
 
-    private func runAICheck(base: TriangleBase, selectedSegment: String) async {
+    private func runAICheck(base: TriangleBase) async -> TriangleAIChecker.ResultEnvelope? {
 #if os(iOS)
         guard let canvasView = canvasController.canvasView else {
-            await MainActor.run {
-                messages.append(ChatMessage(text: "No question to check yet.", isAssistant: true))
-            }
             print("[AICheck] Warning: canvas view unavailable")
-            return
+            return nil
         }
         guard let spec = base.diagramSpec else {
             print("[AICheck] Warning: diagram spec missing")
-            return
+            return nil
         }
         guard let snapshots = TriangleSnapshotter.makeSnapshots(canvasView: canvasView, diagramSpec: spec) else {
             print("[AICheck] Warning: snapshot generation failed")
-            return
+            return nil
         }
         let ts = TriangleSnapshotter.timestampString()
         TriangleSnapshotter.savePNG(data: snapshots.basePNG, filename: "base_\(ts).png")
@@ -166,21 +203,67 @@ struct CanvasSandboxView: View {
             rightAngleAt: base.diagramSpec?.rightAngleAt,
             combinedPNGBase64: combinedBase64
         )
-        let result = envelope.result
-        let prefix = result.studentFeedback.hasPrefix("(AI check)") ? "" : "(AI check) "
-        await MainActor.run {
-            messages.append(ChatMessage(text: "\(prefix)\(result.studentFeedback)", isAssistant: true))
-        }
-        if let status = envelope.statusCode {
-            print("[AICheck] HTTP \(status)")
-        }
-        print("[AICheck] Deterministic=\(selectedSegment) AI=\(result.detectedSegment ?? "nil") amb=\(String(format: "%.2f", result.ambiguityScore)) conf=\(String(format: "%.2f", result.confidence))")
+        return envelope
 #else
-        await MainActor.run {
-            messages.append(ChatMessage(text: "No question to check yet.", isAssistant: true))
-        }
         print("[AICheck] Warning: AI check unsupported on this platform")
+        return nil
 #endif
+    }
+
+    private func startThinkingAnimation() {
+        thinkingTask?.cancel()
+        guard let thinkingID = thinkingMessageID else { return }
+        thinkingTask = Task {
+            var dotCount = 1
+            while !Task.isCancelled {
+                let text = "Thinking" + String(repeating: ".", count: dotCount)
+                await MainActor.run {
+                    updateMessage(id: thinkingID, text: text)
+                }
+                dotCount = dotCount % 3 + 1
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+        }
+    }
+
+    private func stopThinkingAnimation() {
+        thinkingTask?.cancel()
+        thinkingTask = nil
+    }
+
+    private func removeThinkingMessage() {
+        guard let id = thinkingMessageID else { return }
+        messages.removeAll { $0.id == id }
+        thinkingMessageID = nil
+    }
+
+    @MainActor
+    private func updateMessage(id: UUID, text: String) {
+        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        messages[index].text = text
+    }
+
+    private func streamAssistantMessage(_ text: String) async {
+        let message = ChatMessage(text: "", isAssistant: true)
+        let id = message.id
+        await MainActor.run {
+            messages.append(message)
+        }
+        let characters = Array(text)
+        let total = max(characters.count, 1)
+        let minDelay: UInt64 = 10_000_000
+        let maxDelay: UInt64 = 40_000_000
+        let targetTotal: UInt64 = 900_000_000
+        let perChar = min(max(targetTotal / UInt64(total), minDelay), maxDelay)
+
+        var current = ""
+        for char in characters {
+            current.append(char)
+            await MainActor.run {
+                updateMessage(id: id, text: current)
+            }
+            try? await Task.sleep(nanoseconds: perChar)
+        }
     }
 }
 
@@ -346,6 +429,7 @@ private struct CanvasPane: View {
     let onAmbiguousSelection: () -> Void
     let onDebugUpdate: (SelectionDebugInfo?) -> Void
     let canvasController: CanvasController
+    let isCheckingAI: Bool
     let debugInfo: SelectionDebugInfo?
 
     var body: some View {
@@ -360,6 +444,7 @@ private struct CanvasPane: View {
                 onAmbiguousSelection: onAmbiguousSelection,
                 onDebugUpdate: onDebugUpdate,
                 canvasController: canvasController,
+                isCheckingAI: isCheckingAI,
                 debugInfo: debugInfo
             )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -411,6 +496,7 @@ private struct CanvasBoard: View {
     let onAmbiguousSelection: () -> Void
     let onDebugUpdate: (SelectionDebugInfo?) -> Void
     let canvasController: CanvasController
+    let isCheckingAI: Bool
     let debugInfo: SelectionDebugInfo?
 
     var body: some View {
@@ -466,16 +552,18 @@ private struct CanvasBoard: View {
             Button("Check Answer") {
                 onCheckAnswer()
             }
-                .font(.callout.weight(.medium))
-                .padding(.horizontal, 22)
-                .padding(.vertical, 12)
-                .background(
-                    Capsule()
-                        .fill(accentColor.opacity(0.9))
-                )
-                .foregroundStyle(Color.white)
-                .shadow(color: accentColor.opacity(0.35), radius: 12, x: 0, y: 6)
-                .padding(14)
+            .font(.callout.weight(.medium))
+            .padding(.horizontal, 22)
+            .padding(.vertical, 12)
+            .background(
+                Capsule()
+                    .fill(accentColor.opacity(0.9))
+            )
+            .foregroundStyle(Color.white)
+            .shadow(color: accentColor.opacity(0.35), radius: 12, x: 0, y: 6)
+            .padding(14)
+            .disabled(isCheckingAI)
+            .opacity(isCheckingAI ? 0.6 : 1.0)
         }
         .overlay(alignment: .bottom) {
             if UIFlags.showBottomPrompt {

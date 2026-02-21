@@ -2,6 +2,6 @@ import Foundation
 
 struct ChatMessage: Identifiable {
     let id = UUID()
-    let text: String
+    var text: String
     let isAssistant: Bool
 }

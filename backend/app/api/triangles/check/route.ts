@@ -8,6 +8,14 @@ You will be given:
 
 Your task is to analyze the combined image and return exactly strict JSON with no extra text.
 
+Hard rules:
+- You must determine detected_segment ONLY from the ink on the image.
+- Do NOT assume the student circled the correct answer.
+- Report what was circled even if incorrect.
+- student_feedback must be consistent with detected_segment and expected_answer_segment.
+- If detected_segment is wrong, provide a hint but do NOT give the answer directly.
+- If ambiguous (detected_segment = null or ambiguity_score >= 0.6), ask to re-circle just ONE side clearly.
+
 Determine:
 - "detected_segment": which side the student circled ("AB", "BC", "CA"), or null if you cannot confidently determine a single side.
 - "ambiguity_score": a float between 0 and 1 indicating how ambiguous the circle is (0 = very clear, 1 = completely ambiguous).
@@ -73,6 +81,7 @@ export async function POST(request: Request) {
     task?: string;
     right_angle_at?: "A" | "B" | "C" | null;
     combined_png_base64?: string;
+    expected_answer_segment?: "AB" | "BC" | "CA";
   };
 
   try {
@@ -85,8 +94,9 @@ export async function POST(request: Request) {
   const task = body.task ?? "";
   const rightAngleAt = body.right_angle_at ?? null;
   const combinedBase64 = body.combined_png_base64 ?? "";
+  const expectedAnswerSegment = body.expected_answer_segment ?? "AB";
 
-  const header = `Concept: ${concept}\nTask: ${task}\nRightAngleAt: ${rightAngleAt ?? "null"}`;
+  const header = `Concept: ${concept}\nTask: ${task}\nRightAngleAt: ${rightAngleAt ?? "null"}\nExpectedAnswerSegment: ${expectedAnswerSegment}`;
   const fullPrompt = `${header}\n\n${PROMPT}`;
 
   try {
@@ -114,7 +124,8 @@ export async function POST(request: Request) {
       return jsonResponse(ERROR_AI_FAILED, 200);
     }
 
-    return jsonResponse(parsed, 200);
+    const validated = validateResponse(parsed, expectedAnswerSegment);
+    return jsonResponse(validated, 200);
   } catch (err: unknown) {
     console.error("OpenAI error:", err);
     if (err && typeof err === "object" && "response" in err) {
@@ -130,6 +141,51 @@ function safeParseJson(text: string) {
   } catch {
     return null;
   }
+}
+
+function validateResponse(parsed: any, expected: "AB" | "BC" | "CA") {
+  const detected: string | null = parsed?.detected_segment ?? null;
+  const ambiguity = typeof parsed?.ambiguity_score === "number" ? parsed.ambiguity_score : 1;
+  const confidence = typeof parsed?.confidence === "number" ? parsed.confidence : 0;
+  const reasonCodes = Array.isArray(parsed?.reason_codes) ? parsed.reason_codes : ["OTHER"];
+  let feedback = typeof parsed?.student_feedback === "string" ? parsed.student_feedback : "";
+
+  let finalDetected = detected;
+  let overridden = false;
+
+  if (ambiguity >= 0.6) {
+    finalDetected = null;
+  }
+
+  if (!finalDetected) {
+    const lower = feedback.toLowerCase();
+    if (!lower.includes("circle") && !lower.includes("circled")) {
+      feedback = "I can’t tell which side you circled—try circling just ONE side clearly.";
+      overridden = true;
+    }
+  } else {
+    const lower = feedback.toLowerCase();
+    if (!lower.includes(finalDetected.toLowerCase())) {
+      if (finalDetected === expected) {
+        feedback = `Correct — you circled ${finalDetected}.`;
+      } else {
+        feedback = `Not quite. You circled ${finalDetected}. Try circling ${expected}.`;
+      }
+      overridden = true;
+    }
+  }
+
+  console.log(
+    `expected=${expected} ai_detected=${finalDetected ?? "null"} amb=${ambiguity} conf=${confidence} overridden_feedback=${overridden}`
+  );
+
+  return {
+    detected_segment: finalDetected,
+    ambiguity_score: ambiguity,
+    confidence,
+    reason_codes: reasonCodes,
+    student_feedback: feedback
+  };
 }
 
 function jsonResponse(payload: unknown, status: number) {
