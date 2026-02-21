@@ -197,10 +197,12 @@ struct CanvasSandboxView: View {
 
         let combinedBase64 = snapshots.combinedPNG.base64EncodedString()
         let checker = TriangleAIChecker()
+        let expectedSegment = base.answer?.value ?? "AB"
         let envelope = await checker.check(
             concept: "triangle_hypotenuse",
             task: "circle_hypotenuse",
             rightAngleAt: base.diagramSpec?.rightAngleAt,
+            expectedAnswerSegment: expectedSegment,
             combinedPNGBase64: combinedBase64
         )
         return envelope

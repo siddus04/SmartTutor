@@ -27,6 +27,7 @@ final class TriangleAIChecker {
         concept: String,
         task: String,
         rightAngleAt: String?,
+        expectedAnswerSegment: String,
         combinedPNGBase64: String
     ) async -> ResultEnvelope {
         guard let url = URL(string: AppConfig.aiCheckBaseURL + "api/triangles/check") else {
@@ -40,7 +41,8 @@ final class TriangleAIChecker {
             "concept": concept,
             "task": task,
             "right_angle_at": rightAngleAt,
-            "combined_png_base64": combinedPNGBase64
+            "combined_png_base64": combinedPNGBase64,
+            "expected_answer_segment": expectedAnswerSegment
         ]
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload, options: [])
 
