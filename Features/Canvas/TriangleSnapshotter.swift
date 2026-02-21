@@ -49,6 +49,7 @@ struct TriangleSnapshotter {
     private static func renderBaseImage(spec: TriangleDiagramSpec, size: CGSize, scale: CGFloat) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: size, format: rendererFormat(scale: scale))
         return renderer.image { context in
+            fillBackground(context.cgContext, size: size)
             drawTriangle(spec: spec, in: context.cgContext, size: size)
         }
     }
@@ -56,6 +57,8 @@ struct TriangleSnapshotter {
     private static func renderCombinedImage(baseImage: UIImage, inkImage: UIImage, size: CGSize, scale: CGFloat) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: size, format: rendererFormat(scale: scale))
         return renderer.image { _ in
+            UIColor.white.setFill()
+            UIRectFill(CGRect(origin: .zero, size: size))
             baseImage.draw(in: CGRect(origin: .zero, size: size))
             inkImage.draw(in: CGRect(origin: .zero, size: size))
         }
@@ -64,13 +67,13 @@ struct TriangleSnapshotter {
     private static func rendererFormat(scale: CGFloat) -> UIGraphicsImageRendererFormat {
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
-        format.opaque = false
+        format.opaque = true
         return format
     }
 
     private static func drawTriangle(spec: TriangleDiagramSpec, in context: CGContext, size: CGSize) {
         context.saveGState()
-        context.setStrokeColor(UIColor.label.cgColor)
+        context.setStrokeColor(UIColor.black.cgColor)
         context.setLineWidth(2)
 
         let padding = min(size.width, size.height) * 0.12
@@ -103,7 +106,7 @@ struct TriangleSnapshotter {
             let labelPoint = CGPoint(x: pt.x + direction.x * 20, y: pt.y + direction.y * 20)
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: UIFont.systemFont(ofSize: 18, weight: .bold),
-                .foregroundColor: UIColor.label
+                .foregroundColor: UIColor.black
             ]
             let text = NSAttributedString(string: label, attributes: attributes)
             text.draw(at: CGPoint(x: labelPoint.x - 6, y: labelPoint.y - 9))
@@ -130,6 +133,11 @@ struct TriangleSnapshotter {
         }
 
         context.restoreGState()
+    }
+
+    private static func fillBackground(_ context: CGContext, size: CGSize) {
+        context.setFillColor(UIColor.white.cgColor)
+        context.fill(CGRect(origin: .zero, size: size))
     }
 
     private static func triangleCentroid(spec: TriangleDiagramSpec, padding: CGFloat, drawSize: CGSize) -> CGPoint {
