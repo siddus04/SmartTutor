@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
+    "prebuild": "npm install --no-save typescript @types/react",
     "build": "next build",
     "start": "next start"
   },
