@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import CryptoKit
 #if os(iOS)
 import UIKit
 import PencilKit
@@ -224,6 +225,7 @@ struct CanvasSandboxView: View {
         appendLog("Snapshot combined: \(combinedPath ?? "nil")")
 
         let combinedBase64 = snapshots.combinedPNG.base64EncodedString()
+        appendLog("combined_hash=\(sha256Prefix(snapshots.combinedPNG))")
         let checker = TriangleAIChecker()
         let expectedSegment = base.answer?.value ?? "AB"
         let envelope = await checker.check(
@@ -306,6 +308,11 @@ struct CanvasSandboxView: View {
                 debugLog.append("\n\(entry)")
             }
         }
+    }
+
+    private func sha256Prefix(_ data: Data) -> String {
+        let digest = SHA256.hash(data: data)
+        return digest.compactMap { String(format: "%02x", $0) }.joined().prefix(12).lowercased()
     }
 }
 

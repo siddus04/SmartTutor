@@ -204,6 +204,8 @@ function jsonResponse(payload: unknown, status: number) {
     status,
     headers: {
       "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+      "Pragma": "no-cache",
       ...CORS_HEADERS
     }
   });
