@@ -100,7 +100,8 @@ export async function POST(request: Request) {
             { type: "input_text", text: fullPrompt },
             {
               type: "input_image",
-              image_url: `data:image/png;base64,${combinedBase64}`
+              image_url: `data:image/png;base64,${combinedBase64}`,
+              detail: "auto"
             }
           ]
         }
