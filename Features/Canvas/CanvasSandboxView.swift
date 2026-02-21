@@ -3,6 +3,9 @@ import Combine
 import CryptoKit
 #if os(iOS)
 import UIKit
+#endif
+#if os(iOS)
+import UIKit
 import PencilKit
 #endif
 
@@ -208,24 +211,80 @@ struct CanvasSandboxView: View {
             print("[AICheck] Warning: canvas view unavailable")
             return nil
         }
-        guard let spec = base.diagramSpec else {
-            print("[AICheck] Warning: diagram spec missing")
-            return nil
+        let scale = UIScreen.main.scale
+        let size = canvasView.bounds.size
+#if os(iOS)
+        let baseImage = renderBaseBackground(size: size, scale: scale, background: nil)
+        let inkImage = canvasView.drawing.image(from: canvasView.bounds, scale: scale)
+#endif
+        let submission = await MainActor.run {
+            VisionPipeline.renderSubmissionImage(canvasView: canvasView, background: nil)
         }
-        guard let snapshots = TriangleSnapshotter.makeSnapshots(canvasView: canvasView, diagramSpec: spec) else {
-            print("[AICheck] Warning: snapshot generation failed")
-            return nil
+        let flattened = await MainActor.run {
+            VisionPipeline.flattenOnWhite(submission)
         }
+
+        let gate = VisionPipeline.shouldCallVision(inkDrawing: canvasView.drawing, renderedImage: flattened)
+        if !gate.ok {
+            return TriangleAIChecker.ResultEnvelope(
+                result: TriangleAICheckResult(
+                    detectedSegment: nil,
+                    ambiguityScore: 1.0,
+                    confidence: 0.0,
+                    reasonCodes: gate.reasons,
+                    studentFeedback: "I can’t see a clear mark yet. Try circling or marking more clearly."
+                ),
+                statusCode: nil,
+                didFallback: false
+            )
+        }
+
         let ts = TriangleSnapshotter.timestampString()
-        let basePath = TriangleSnapshotter.savePNG(data: snapshots.basePNG, filename: "base_\(ts).png")
-        let inkPath = TriangleSnapshotter.savePNG(data: snapshots.inkPNG, filename: "ink_\(ts).png")
-        let combinedPath = TriangleSnapshotter.savePNG(data: snapshots.combinedPNG, filename: "combined_\(ts).png")
+#if os(iOS)
+        let basePath = TriangleSnapshotter.savePNG(data: baseImage.pngData() ?? Data(), filename: "base_\(ts).png")
+        let inkPath = TriangleSnapshotter.savePNG(data: inkImage.pngData() ?? Data(), filename: "ink_\(ts).png")
+#else
+        let basePath: String? = nil
+        let inkPath: String? = nil
+#endif
+        let combinedPath = TriangleSnapshotter.savePNG(data: flattened.pngData() ?? Data(), filename: "combined_\(ts).png")
         appendLog("Snapshot base: \(basePath ?? "nil")")
         appendLog("Snapshot ink: \(inkPath ?? "nil")")
         appendLog("Snapshot combined: \(combinedPath ?? "nil")")
+        appendLog("combined_hash=\(sha256Prefix(flattened.pngData() ?? Data()))")
 
-        let combinedBase64 = snapshots.combinedPNG.base64EncodedString()
-        appendLog("combined_hash=\(sha256Prefix(snapshots.combinedPNG))")
+        var imageForVision = flattened
+        let config = VisionRequestConfig()
+        if config.enableCropping {
+            imageForVision = await MainActor.run {
+                VisionPipeline.cropToContentBounds(
+                    imageForVision,
+                    paddingPct: config.paddingPct,
+                    minSize: config.minCropSize,
+                    inkDrawing: canvasView.drawing,
+                    canvasSize: canvasView.bounds.size,
+                    minKeepAreaFraction: config.minKeepAreaFraction
+                )
+            }
+        }
+        imageForVision = await MainActor.run {
+            VisionPipeline.resizeForVision(imageForVision, longEdge: config.longEdge)
+        }
+        appendLog("Sizes px: submission=\(intSize(flattened.size)) cropped=\(intSize(imageForVision.size))")
+
+        guard let encoded = await MainActor.run({
+            VisionPipeline.encodeForAPIPayload(
+                imageForVision,
+                maxPNGBytes: config.maxPNGBytes,
+                jpegQuality: config.jpegFallbackQuality
+            )
+        }) else {
+            print("[AICheck] Warning: encoding failed")
+            return nil
+        }
+        appendLog("Payload mime=\(encoded.mime) bytes=\(encoded.byteCount)")
+        let combinedBase64 = encoded.base64
+
         let checker = TriangleAIChecker()
         let expectedSegment = base.answer?.value ?? "AB"
         let envelope = await checker.check(
@@ -313,6 +372,26 @@ struct CanvasSandboxView: View {
     private func sha256Prefix(_ data: Data) -> String {
         let digest = SHA256.hash(data: data)
         return digest.compactMap { String(format: "%02x", $0) }.joined().prefix(12).lowercased()
+    }
+
+    #if os(iOS)
+    private func renderBaseBackground(size: CGSize, scale: CGFloat, background: UIImage?) -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: size, format: {
+            let f = UIGraphicsImageRendererFormat()
+            f.scale = scale
+            f.opaque = true
+            return f
+        }())
+        return renderer.image { _ in
+            UIColor.white.setFill()
+            UIRectFill(CGRect(origin: .zero, size: size))
+            background?.draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
+    #endif
+
+    private func intSize(_ size: CGSize) -> String {
+        "\(Int(size.width))x\(Int(size.height))"
     }
 }
 
@@ -414,7 +493,7 @@ private struct TutorPane: View {
                     .fill(Color.secondary.opacity(0.08))
             )
             .frame(maxHeight: .infinity)
-            .onChange(of: messages.count) { _ in
+            .onChange(of: messages.count) { _, _ in
                 guard let lastID = messages.last?.id else { return }
                 withAnimation(.easeOut(duration: 0.2)) {
                     proxy.scrollTo(lastID, anchor: .bottom)

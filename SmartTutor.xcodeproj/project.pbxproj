@@ -20,6 +20,7 @@
 		38E5B2892F4899ED004B0B2E /* TriangleDiagramView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2882F4899ED004B0B2E /* TriangleDiagramView.swift */; };
 		38E5B28E2F48ACC0004B0B2E /* TriangleSnapshotter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B28D2F48ACC0004B0B2E /* TriangleSnapshotter.swift */; };
 		38E5B28F2F48ACC0004B0B2E /* TriangleAIChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B28C2F48ACC0004B0B2E /* TriangleAIChecker.swift */; };
+		38E5B2932F49D067004B0B2E /* VisionPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2922F49D067004B0B2E /* VisionPipeline.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,6 +57,7 @@
 		38E5B2882F4899ED004B0B2E /* TriangleDiagramView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriangleDiagramView.swift; sourceTree = "<group>"; };
 		38E5B28C2F48ACC0004B0B2E /* TriangleAIChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriangleAIChecker.swift; sourceTree = "<group>"; };
 		38E5B28D2F48ACC0004B0B2E /* TriangleSnapshotter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriangleSnapshotter.swift; sourceTree = "<group>"; };
+		38E5B2922F49D067004B0B2E /* VisionPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionPipeline.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -157,6 +159,7 @@
 		3856AD082F2CA46700CC610B /* Canvas */ = {
 			isa = PBXGroup;
 			children = (
+				38E5B2922F49D067004B0B2E /* VisionPipeline.swift */,
 				38E5B28C2F48ACC0004B0B2E /* TriangleAIChecker.swift */,
 				38E5B28D2F48ACC0004B0B2E /* TriangleSnapshotter.swift */,
 				38E5B2882F4899ED004B0B2E /* TriangleDiagramView.swift */,
@@ -352,6 +355,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				38E5B2652F48952C004B0B2E /* TriangleModels.swift in Sources */,
+				38E5B2932F49D067004B0B2E /* VisionPipeline.swift in Sources */,
 				38E5B2662F48952C004B0B2E /* ChatMessage.swift in Sources */,
 				38E5B2672F48952C004B0B2E /* TriangleAPI.swift in Sources */,
 				3856AD172F2DD48900CC610B /* CanvasSandboxView.swift in Sources */,
