@@ -1,0 +1,9 @@
+{
+  "name": "smartutor-root",
+  "private": true,
+  "workspaces": ["backend"],
+  "scripts": {
+    "build": "npm -w backend run build"
+  }
+}
+
