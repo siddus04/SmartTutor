@@ -15,18 +15,18 @@ struct RootView: View {
 
     private var mainNavigation: some View {
         NavigationStack {
-            List {
-                NavigationLink("Exercises", destination: ExercisesHomeView())
-                NavigationLink("Canvas Sandbox", destination: CanvasSandboxView())
-            }
-            .navigationTitle("SmartTutor")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Reset") {
-                        sessionStore.resetSession()
+            CanvasSandboxView()
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Text("SmartTutor")
+                            .font(.headline)
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Reset") {
+                            sessionStore.resetSession()
+                        }
                     }
                 }
-            }
         }
     }
 }
