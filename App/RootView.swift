@@ -6,14 +6,14 @@ struct RootView: View {
     var body: some View {
         Group {
             if sessionStore.isOnboardingComplete {
-                mainNavigation
+                canvasNavigation
             } else {
                 OnboardingFlowView()
             }
         }
     }
 
-    private var mainNavigation: some View {
+    private var canvasNavigation: some View {
         NavigationStack {
             CanvasSandboxView()
                 .toolbar {

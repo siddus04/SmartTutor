@@ -10,6 +10,7 @@ import PencilKit
 #endif
 
 struct CanvasSandboxView: View {
+    @EnvironmentObject private var sessionStore: LearnerSessionStore
     private let accentColor = Color(red: 0.32, green: 0.64, blue: 0.66)
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var latestBase: TriangleBase?

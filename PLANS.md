@@ -77,6 +77,18 @@
 
 ---
 
+---
+**Implementation notes (2026-02-22, direct-to-canvas routing):**
+- Files touched:
+  - `App/RootView.swift`
+  - `Features/Canvas/CanvasSandboxView.swift`
+- Manual test steps:
+  1. Launch with no persisted learner session; verify onboarding is shown.
+  2. Complete onboarding; verify root routes directly to `CanvasSandboxView`.
+  3. Relaunch app with persisted session; verify it opens directly on canvas again.
+  4. Use canvas Reset toolbar button; verify `sessionStore.resetSession()` returns to onboarding deterministically.
+  5. In canvas, load a question and run check-answer flow; verify tutor + grading interactions still work.
+
 ### M2 — Curriculum Graph + Mastery Engine (Deterministic Rails)
 **Goal:** Implement concept progression and mastery as one integrated deterministic system.
 
