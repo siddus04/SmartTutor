@@ -15,6 +15,7 @@ struct RootView: View {
 
     private var canvasNavigation: some View {
         NavigationStack {
+<<<<<<< HEAD
             CanvasSandboxView()
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
@@ -27,6 +28,28 @@ struct RootView: View {
                         }
                     }
                 }
+=======
+            List {
+                NavigationLink("Exercises", destination: ExercisesHomeView())
+                NavigationLink("Canvas Sandbox", destination: CanvasSandboxView())
+            }
+            .navigationTitle("SmartTutor")
+            .toolbar {
+#if os(iOS)
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Reset") {
+                        sessionStore.resetSession()
+                    }
+                }
+#else
+                ToolbarItem(placement: .automatic) {
+                    Button("Reset") {
+                        sessionStore.resetSession()
+                    }
+                }
+#endif
+            }
+>>>>>>> f686a1d (wip before pull)
         }
     }
 }
