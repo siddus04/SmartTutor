@@ -23,6 +23,7 @@ struct CanvasSandboxView: View {
     @State private var thinkingTask: Task<Void, Never>?
     @State private var debugLog: String = ""
     @State private var isLogExpanded = false
+    @State private var isShowingLearningHub = false
 
     var body: some View {
         ZStack {
@@ -117,14 +118,18 @@ struct CanvasSandboxView: View {
             .padding(.vertical, 6)
         }
         .overlay(alignment: .bottomTrailing) {
-            if DebugFlags.showLogOverlay {
+            if DebugFlags.showLogOverlay && isLogExpanded {
                 LogOverlay(
                     logText: debugLog,
-                    isExpanded: $isLogExpanded,
                     onCopy: {
                         #if os(iOS)
                         UIPasteboard.general.string = debugLog
                         #endif
+                    },
+                    onClose: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isLogExpanded = false
+                        }
                     }
                 )
                 .padding(10)
@@ -134,6 +139,29 @@ struct CanvasSandboxView: View {
             if messages.isEmpty {
                 messages = [ChatMessage(text: "Tap “New Question” to start.", isAssistant: true)]
             }
+        }
+        .navigationTitle("Canvas")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("Learning Hub") {
+                        isShowingLearningHub = true
+                    }
+
+                    if DebugFlags.showLogOverlay {
+                        Button(isLogExpanded ? "Hide Logs" : "Show Logs") {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isLogExpanded.toggle()
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal")
+                }
+            }
+        }
+        .navigationDestination(isPresented: $isShowingLearningHub) {
+            ExercisesHomeView()
         }
     }
 
@@ -1350,52 +1378,38 @@ private struct OverlayPillIconButton: View {
 
 private struct LogOverlay: View {
     let logText: String
-    @Binding var isExpanded: Bool
     let onCopy: () -> Void
+    let onClose: () -> Void
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Logs")
-                            .font(.footnote.weight(.semibold))
-                        Spacer()
-                        Button("Copy") {
-                            onCopy()
-                        }
-                        .font(.footnote.weight(.semibold))
-                    }
-                    TextEditor(text: .constant(logText))
-                        .font(.system(size: 11, weight: .regular, design: .monospaced))
-                        .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 240)
-                        .background(Color.black.opacity(0.05))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Logs")
+                    .font(.footnote.weight(.semibold))
+                Spacer()
+                Button("Copy") {
+                    onCopy()
                 }
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .background(.thinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.black.opacity(0.08), lineWidth: 1)
-                )
-            }
-
-            Button(isExpanded ? "Hide Logs" : "Show Logs") {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.toggle()
+                .font(.footnote.weight(.semibold))
+                Button("Close") {
+                    onClose()
                 }
+                .font(.footnote.weight(.semibold))
             }
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .fill(Color.black.opacity(0.08))
-            )
+            TextEditor(text: .constant(logText))
+                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 240)
+                .background(Color.black.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
+        .padding(10)
         .frame(maxWidth: .infinity, alignment: .trailing)
+        .background(.thinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+        )
         .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 4)
     }
 }

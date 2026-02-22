@@ -58,6 +58,29 @@
   3. Relaunch app; verify session resumes deterministically without returning to onboarding.
   4. Tap Reset in root toolbar; verify session clears and onboarding is shown again.
 
+**Implementation notes (2026-02-22 — Learning Hub reframing):**
+- Files touched:
+  - `Features/Exercises/ExercisesHomeView.swift`
+  - `Features/Canvas/CanvasSandboxView.swift`
+  - `App/RootView.swift`
+- Manual test steps:
+  1. Launch with an existing learner session; verify canvas is now the first post-onboarding screen.
+  2. From canvas toolbar, tap **Learning Hub** and verify navigation opens the repurposed hub screen.
+  3. In Learning Hub, verify learner-facing sections and compact diagnostics (grade/topic/concept graph) are visible.
+  4. Tap **Continue Learning** and verify it returns to canvas.
+  5. Confirm hub only shows Grade 6 + Geometry → Triangles scope text with no out-of-scope options.
+
+**Implementation notes (2026-02-22 — Canvas menu consolidation):**
+- Files touched:
+  - `Features/Canvas/CanvasSandboxView.swift`
+  - `App/RootView.swift`
+- Manual test steps:
+  1. Launch with an existing learner session and verify canvas layout has no duplicate top-level Learning Hub/Logs actions.
+  2. Tap the hamburger menu in canvas toolbar and verify **Learning Hub** and **Show Logs/Hide Logs** are available there.
+  3. Open **Learning Hub** from hamburger menu; verify hub navigation still works.
+  4. Open logs from hamburger menu; verify overlay appears and can be closed via the overlay **Close** action.
+  5. Confirm chat and canvas visible area is increased by removing always-visible Logs pill and extra title action.
+
 ---
 
 ### M2 — Curriculum Graph + Mastery Engine (Deterministic Rails)
@@ -305,4 +328,3 @@
 
 ### Status estimate
 - Current repo appears to be **foundation stage with partial M4/M5 building blocks**; sequence-critical work is M1 → M2 → M3 next.
-
