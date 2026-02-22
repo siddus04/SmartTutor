@@ -250,10 +250,11 @@ async function generateFeedback(
   }
 
   if (validated.detected_segment == null || validated.ambiguity_score >= 0.6) {
-    return "I can’t tell which side you circled—try circling just ONE side clearly.";
+    return "I can't tell which side you circled—try circling just ONE side clearly.";
   }
   if (validated.detected_segment !== expected) {
-    return "You circled \(validated.detected_segment ?? "that side"), but it’s not the hypotenuse. Hint 1: the hypotenuse is the longest side. Hint 2: it’s opposite the right angle.";
+    const detected = validated.detected_segment ?? "that side";
+    return `You circled ${detected}, but it's not the hypotenuse. Hint 1: the hypotenuse is the longest side. Hint 2: it's opposite the right angle.`;
   }
   return "Good job! In real life, the hypotenuse shows up when a ladder leans against a wall—the ladder is the hypotenuse.";
 }
