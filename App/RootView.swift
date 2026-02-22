@@ -16,7 +16,17 @@ struct RootView: View {
     private var canvasNavigation: some View {
         NavigationStack {
             CanvasSandboxView()
-                .navigationTitle("Canvas Sandbox")
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Text("SmartTutor")
+                            .font(.headline)
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Reset") {
+                            sessionStore.resetSession()
+                        }
+                    }
+                }
         }
     }
 }

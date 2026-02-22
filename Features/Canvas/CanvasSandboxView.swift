@@ -24,6 +24,7 @@ struct CanvasSandboxView: View {
     @State private var thinkingTask: Task<Void, Never>?
     @State private var debugLog: String = ""
     @State private var isLogExpanded = false
+    @State private var isShowingLearningHub = false
 
     var body: some View {
         ZStack {
@@ -136,12 +137,16 @@ struct CanvasSandboxView: View {
                 messages = [ChatMessage(text: "Tap “New Question” to start.", isAssistant: true)]
             }
         }
+        .navigationTitle("Canvas")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Reset") {
-                    sessionStore.resetSession()
+                Button("Learning Hub") {
+                    isShowingLearningHub = true
                 }
             }
+        }
+        .navigationDestination(isPresented: $isShowingLearningHub) {
+            ExercisesHomeView()
         }
     }
 
