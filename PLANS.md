@@ -83,7 +83,7 @@
 **Goal:** Lock strict LLM schema/validation so only safe, in-scope structured specs can drive UX.
 
 **Build:**
-- Define strict JSON contracts for question bundle:
+- Definstrict JSON contracts for question bundle:
   - diagram spec,
   - question prompt,
   - answer key,
@@ -138,7 +138,7 @@
 4. Confirm unsupported interaction mode is rejected gracefully.
 
 **Acceptance criteria:**
-- At least 2 interaction modes complete; target 3 including numeric/formula.
+- At least 2 interaction modes complete;get 3 including numeric/formula.
 - Rendering is deterministic and stable.
 - Inputs are captured in grading-ready normalized format.
 
@@ -167,7 +167,7 @@
 **Manual test steps:**
 1. Submit clean highlight; verify correct detection and confidence handling.
 2. Submit ambiguous ink; verify re-attempt guidance is returned.
-3. Submit wrong answer in each mode; verify hinting style and no answer leakage policy.
+3. Submit wrong answer in each mode; vefy hinting style and no answer leakage policy.
 4. Submit correct answer; verify concise praise + practical real-world context.
 
 **Acceptance criteria:**
@@ -196,7 +196,7 @@
   - XP,
   - streak bonus,
   - concept mastered badge.
-- Completion and transition states for topic end.
+- Completion and transitiontes for topic end.
 
 **Files touched (planned):**
 - `Features/Exercises/ExercisesHomeView.swift`
@@ -224,7 +224,7 @@
 - Instrument events for:
   - completion funnel,
   - ambiguity/grading errors,
-  - concept progression and churn.
+  - coept progression and churn.
 - Add QA checklist for all milestone acceptance criteria.
 - Publish readiness report against PRD success metrics.
 
@@ -256,7 +256,7 @@
 | Mastery threshold + adaptive difficulty + unlock gating | M2, M6 |
 | LLM structured JSON constraints + validation | M3 |
 | Deterministic rendering (diagram/text/equation) | M3, M4 |
-| 2–3 interaction types | M4 |
+| 2–3 interaction typ4 |
 | Vision/input-based grading + confidence/ambiguity | M5 |
 | Tutor-style explanation/hints/real-world context | M3, M5 |
 | Lesson loop progression/remediation/unlock | M6 |
@@ -286,3 +286,4 @@
 
 ### Status estimate
 - Current repo appears to be **foundation stage with partial M4/M5 building blocks**; sequence-critical work is M1 → M2 → M3 next.
+
