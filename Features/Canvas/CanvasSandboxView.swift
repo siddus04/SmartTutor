@@ -139,11 +139,19 @@ struct CanvasSandboxView: View {
         }
         .navigationTitle("Canvas")
         .toolbar {
+            #if os(iOS)
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Learning Hub") {
                     isShowingLearningHub = true
                 }
             }
+            #else
+            ToolbarItem(placement: .automatic) {
+                Button("Learning Hub") {
+                    isShowingLearningHub = true
+                }
+            }
+            #endif
         }
         .navigationDestination(isPresented: $isShowingLearningHub) {
             ExercisesHomeView()
