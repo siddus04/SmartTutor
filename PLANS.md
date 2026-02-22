@@ -10,6 +10,8 @@
 ## Milestone List
 
 ### M1 — Onboarding + Learner Session Initialization
+**Status:** Implemented
+
 **Goal:** Implement learner entry flow and initialize bounded Grade 6 triangle learning state.
 
 **Build:**
@@ -37,6 +39,24 @@
 - Grade/topic onboarding works end-to-end.
 - Session state initializes required objects (concept/mastery/difficulty cap).
 - Scope guardrail (Grade 6 triangles only) is enforced in UI and state.
+
+---
+**Implementation notes (2026-02-22):**
+- Files touched:
+  - `App/Session/LearnerSession.swift`
+  - `App/Session/LearnerSessionStore.swift`
+  - `Features/Onboarding/OnboardingFlowView.swift`
+  - `Features/Onboarding/GradeSelectionView.swift`
+  - `Features/Onboarding/TopicSelectionView.swift`
+  - `App/SmartTutorApp.swift`
+  - `App/RootView.swift`
+  - `App/AppConfig.swift`
+  - `Features/Exercises/ExercisesHomeView.swift`
+- Manual test steps:
+  1. Launch app with empty session data; verify onboarding appears and enforces Grade 6 + Geometry → Triangles.
+  2. Complete onboarding; verify learner session is initialized and app navigates to existing home links.
+  3. Relaunch app; verify session resumes deterministically without returning to onboarding.
+  4. Tap Reset in root toolbar; verify session clears and onboarding is shown again.
 
 ---
 

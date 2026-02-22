@@ -21,6 +21,11 @@
 		38E5B28E2F48ACC0004B0B2E /* TriangleSnapshotter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B28D2F48ACC0004B0B2E /* TriangleSnapshotter.swift */; };
 		38E5B28F2F48ACC0004B0B2E /* TriangleAIChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B28C2F48ACC0004B0B2E /* TriangleAIChecker.swift */; };
 		38E5B2932F49D067004B0B2E /* VisionPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2922F49D067004B0B2E /* VisionPipeline.swift */; };
+		38F100012F50000100AA0001 /* LearnerSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F100112F50000100AA0001 /* LearnerSession.swift */; };
+		38F100022F50000100AA0001 /* LearnerSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F100122F50000100AA0001 /* LearnerSessionStore.swift */; };
+		38F100032F50000100AA0001 /* OnboardingFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F100132F50000100AA0001 /* OnboardingFlowView.swift */; };
+		38F100042F50000100AA0001 /* GradeSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F100142F50000100AA0001 /* GradeSelectionView.swift */; };
+		38F100052F50000100AA0001 /* TopicSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F100152F50000100AA0001 /* TopicSelectionView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,6 +63,11 @@
 		38E5B28C2F48ACC0004B0B2E /* TriangleAIChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriangleAIChecker.swift; sourceTree = "<group>"; };
 		38E5B28D2F48ACC0004B0B2E /* TriangleSnapshotter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriangleSnapshotter.swift; sourceTree = "<group>"; };
 		38E5B2922F49D067004B0B2E /* VisionPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionPipeline.swift; sourceTree = "<group>"; };
+		38F100112F50000100AA0001 /* LearnerSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearnerSession.swift; sourceTree = "<group>"; };
+		38F100122F50000100AA0001 /* LearnerSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearnerSessionStore.swift; sourceTree = "<group>"; };
+		38F100132F50000100AA0001 /* OnboardingFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlowView.swift; sourceTree = "<group>"; };
+		38F100142F50000100AA0001 /* GradeSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GradeSelectionView.swift; sourceTree = "<group>"; };
+		38F100152F50000100AA0001 /* TopicSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicSelectionView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -133,9 +143,19 @@
 				38E5B2602F489508004B0B2E /* AppConfig.swift */,
 				38E5B2692F4899B9004B0B2E /* Color+App.swift */,
 				3856AD0F2F2CA55500CC610B /* RootView.swift */,
+				38F100212F50000100AA0001 /* Session */,
 				3856AD0E2F2CA53C00CC610B /* SmartTutorApp.swift */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		38F100212F50000100AA0001 /* Session */ = {
+			isa = PBXGroup;
+			children = (
+				38F100112F50000100AA0001 /* LearnerSession.swift */,
+				38F100122F50000100AA0001 /* LearnerSessionStore.swift */,
+			);
+			path = Session;
 			sourceTree = "<group>";
 		};
 		3856AD062F2CA45500CC610B /* Features */ = {
@@ -144,8 +164,19 @@
 				3856AD092F2CA46E00CC610B /* Chat */,
 				3856AD082F2CA46700CC610B /* Canvas */,
 				3856AD072F2CA45D00CC610B /* Exercises */,
+				38F100222F50000100AA0001 /* Onboarding */,
 			);
 			path = Features;
+			sourceTree = "<group>";
+		};
+		38F100222F50000100AA0001 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				38F100132F50000100AA0001 /* OnboardingFlowView.swift */,
+				38F100142F50000100AA0001 /* GradeSelectionView.swift */,
+				38F100152F50000100AA0001 /* TopicSelectionView.swift */,
+			);
+			path = Onboarding;
 			sourceTree = "<group>";
 		};
 		3856AD072F2CA45D00CC610B /* Exercises */ = {
@@ -354,6 +385,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				38F100012F50000100AA0001 /* LearnerSession.swift in Sources */,
+				38F100022F50000100AA0001 /* LearnerSessionStore.swift in Sources */,
+				38F100032F50000100AA0001 /* OnboardingFlowView.swift in Sources */,
+				38F100042F50000100AA0001 /* GradeSelectionView.swift in Sources */,
+				38F100052F50000100AA0001 /* TopicSelectionView.swift in Sources */,
 				38E5B2652F48952C004B0B2E /* TriangleModels.swift in Sources */,
 				38E5B2932F49D067004B0B2E /* VisionPipeline.swift in Sources */,
 				38E5B2662F48952C004B0B2E /* ChatMessage.swift in Sources */,
