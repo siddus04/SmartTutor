@@ -52,11 +52,16 @@
   - `App/RootView.swift`
   - `App/AppConfig.swift`
   - `Features/Exercises/ExercisesHomeView.swift`
+  - `Features/Canvas/CanvasSandboxView.swift`
+- UX direction updates (M1-scoped):
+  - Post-onboarding and session-restore default route now lands directly on the learning canvas.
+  - Learning Hub is now treated as a secondary screen that is reachable from the canvas.
 - Manual test steps:
   1. Launch app with empty session data; verify onboarding appears and enforces Grade 6 + Geometry → Triangles.
-  2. Complete onboarding; verify learner session is initialized and app navigates to existing home links.
-  3. Relaunch app; verify session resumes deterministically without returning to onboarding.
+  2. Complete onboarding; verify learner session is initialized and app routes directly to canvas by default.
+  3. Relaunch app; verify session restores deterministically to canvas without returning to onboarding.
   4. Tap Reset in root toolbar; verify session clears and onboarding is shown again.
+  5. From canvas, open Learning Hub via its secondary entry point; verify hub is reachable but not the default landing screen.
 
 **Implementation notes (2026-02-22 — Learning Hub reframing):**
 - Files touched:
