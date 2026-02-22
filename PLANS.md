@@ -87,6 +87,19 @@
   4. Tap **Continue Learning** and verify it returns to canvas.
   5. Confirm hub only shows Grade 6 + Geometry → Triangles scope text with no out-of-scope options.
 
+
+**Implementation notes (2026-02-22 — Canvas navigation drawer cleanup):**
+- Files touched:
+  - `App/RootView.swift`
+  - `Features/Canvas/CanvasSandboxView.swift`
+- Manual test steps:
+  1. Launch with an existing learner session and verify the screen title reads **Smart Tutor** (not Canvas).
+  2. Confirm the chat pane no longer shows the **AI Math Tutor** heading above the chat area.
+  3. Tap the hamburger icon in the top-right and verify a right-side navigation drawer appears.
+  4. In the drawer, open **Learning Hub** and verify navigation works.
+  5. In the drawer, toggle **Show Logs/Hide Logs** and verify the log overlay visibility updates.
+  6. Use **Reset Session** from the drawer and verify onboarding is shown again.
+
 **Implementation notes (2026-02-22 — Canvas menu consolidation):**
 - Files touched:
   - `Features/Canvas/CanvasSandboxView.swift`
