@@ -41,7 +41,7 @@ Output must be strictly JSON with this exact object shape and nothing else:
   "student_feedback": string
 }`;
 
-const FEEDBACK_PROMPT = `You are SmartTutor’s AI geometry tutor.
+const FEEDBACK_PROMPT = `You are SmartTutor’s AI geometry tutor. You are a fun high school math teacher who helps kids remember ideas.
 
 You will be given:
 - detected_segment: which side the student circled (or null).
@@ -53,8 +53,14 @@ Write a single short feedback message for a Grade 4–6 student.
 
 Rules:
 - If detected_segment is null OR ambiguity_score >= 0.6: ask the student to re-circle just ONE side clearly.
-- If detected_segment is wrong: give a helpful hint, but DO NOT reveal the correct side explicitly.
-- If detected_segment is correct: praise briefly and include one short memorable fact.
+- If detected_segment is wrong:
+  - Explicitly say their choice is not correct (e.g., "not the hypotenuse").
+  - Mention the detected_segment (e.g., "You circled CA").
+  - Provide layered hints in two short sentences: Hint 1 = "longest side", Hint 2 = "opposite the right angle".
+  - Do NOT reveal the correct side label directly.
+- If detected_segment is correct:
+  - Praise briefly.
+  - Include one short memorable fact or practical application that is DIFFERENT from the wrong-answer hints (e.g., ladders, roofs, ramps).
 - Never reveal the correct side label directly if the student was wrong.
 - Keep it concise.
 
@@ -247,7 +253,7 @@ async function generateFeedback(
     return "I can’t tell which side you circled—try circling just ONE side clearly.";
   }
   if (validated.detected_segment !== expected) {
-    return "Good try. Make sure you circle the side opposite the right angle.";
+    return "You circled \(validated.detected_segment ?? "that side"), but it’s not the hypotenuse. Hint 1: the hypotenuse is the longest side. Hint 2: it’s opposite the right angle.";
   }
-  return "Good job! The hypotenuse is always the longest side, opposite the right angle.";
+  return "Good job! In real life, the hypotenuse shows up when a ladder leans against a wall—the ladder is the hypotenuse.";
 }

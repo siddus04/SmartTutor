@@ -213,12 +213,9 @@ struct CanvasSandboxView: View {
         }
         let scale = UIScreen.main.scale
         let size = canvasView.bounds.size
-#if os(iOS)
-        let baseImage = renderBaseBackground(size: size, scale: scale, background: nil)
-        let inkImage = canvasView.drawing.image(from: canvasView.bounds, scale: scale)
-#endif
+        let backgroundImage: UIImage? = await MainActor.run { baseDiagramImage(size: size, scale: scale, base: base) }
         let submission = await MainActor.run {
-            VisionPipeline.renderSubmissionImage(canvasView: canvasView, background: nil)
+            VisionPipeline.renderSubmissionImage(canvasView: canvasView, background: backgroundImage)
         }
         let flattened = await MainActor.run {
             VisionPipeline.flattenOnWhite(submission)
@@ -240,13 +237,8 @@ struct CanvasSandboxView: View {
         }
 
         let ts = TriangleSnapshotter.timestampString()
-#if os(iOS)
-        let basePath = TriangleSnapshotter.savePNG(data: baseImage.pngData() ?? Data(), filename: "base_\(ts).png")
-        let inkPath = TriangleSnapshotter.savePNG(data: inkImage.pngData() ?? Data(), filename: "ink_\(ts).png")
-#else
-        let basePath: String? = nil
-        let inkPath: String? = nil
-#endif
+        let basePath = TriangleSnapshotter.savePNG(data: backgroundImage?.pngData() ?? Data(), filename: "base_\(ts).png")
+        let inkPath = TriangleSnapshotter.savePNG(data: canvasView.drawing.image(from: canvasView.bounds, scale: scale).pngData() ?? Data(), filename: "ink_\(ts).png")
         let combinedPath = TriangleSnapshotter.savePNG(data: flattened.pngData() ?? Data(), filename: "combined_\(ts).png")
         appendLog("Snapshot base: \(basePath ?? "nil")")
         appendLog("Snapshot ink: \(inkPath ?? "nil")")
@@ -272,13 +264,14 @@ struct CanvasSandboxView: View {
         }
         appendLog("Sizes px: submission=\(intSize(flattened.size)) cropped=\(intSize(imageForVision.size))")
 
-        guard let encoded = await MainActor.run({
+        let encoded = await MainActor.run {
             VisionPipeline.encodeForAPIPayload(
                 imageForVision,
                 maxPNGBytes: config.maxPNGBytes,
                 jpegQuality: config.jpegFallbackQuality
             )
-        }) else {
+        }
+        guard let encoded else {
             print("[AICheck] Warning: encoding failed")
             return nil
         }
@@ -375,18 +368,115 @@ struct CanvasSandboxView: View {
     }
 
     #if os(iOS)
-    private func renderBaseBackground(size: CGSize, scale: CGFloat, background: UIImage?) -> UIImage {
+    private func baseDiagramImage(size: CGSize, scale: CGFloat, base: TriangleBase) -> UIImage? {
+        guard let spec = base.diagramSpec else { return nil }
         let renderer = UIGraphicsImageRenderer(size: size, format: {
             let f = UIGraphicsImageRendererFormat()
             f.scale = scale
             f.opaque = true
             return f
         }())
-        return renderer.image { _ in
+        return renderer.image { context in
             UIColor.white.setFill()
             UIRectFill(CGRect(origin: .zero, size: size))
-            background?.draw(in: CGRect(origin: .zero, size: size))
+            let padding = min(size.width, size.height) * 0.12
+            let drawSize = CGSize(width: max(size.width - padding * 2, 1), height: max(size.height - padding * 2, 1))
+
+            func point(_ key: String) -> CGPoint? {
+                guard let p = spec.points[key] else { return nil }
+                return CGPoint(
+                    x: padding + CGFloat(p.x) * drawSize.width,
+                    y: padding + CGFloat(p.y) * drawSize.height
+                )
+            }
+
+            context.cgContext.setStrokeColor(UIColor.black.cgColor)
+            context.cgContext.setLineWidth(2)
+            for segment in spec.segments {
+                let chars = Array(segment)
+                guard chars.count == 2 else { continue }
+                let aKey = String(chars[0])
+                let bKey = String(chars[1])
+                guard let a = point(aKey), let b = point(bKey) else { continue }
+                context.cgContext.beginPath()
+                context.cgContext.move(to: a)
+                context.cgContext.addLine(to: b)
+                context.cgContext.strokePath()
+            }
+
+            for (key, label) in spec.vertexLabels {
+                guard let pt = point(key) else { continue }
+                let centroid = triangleCentroid(spec: spec, padding: padding, drawSize: drawSize)
+                let direction = normalized(CGPoint(x: pt.x - centroid.x, y: pt.y - centroid.y))
+                let labelPoint = CGPoint(x: pt.x + direction.x * 20, y: pt.y + direction.y * 20)
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.systemFont(ofSize: 18, weight: .bold),
+                    .foregroundColor: UIColor.black
+                ]
+                let text = NSAttributedString(string: label, attributes: attributes)
+                text.draw(at: CGPoint(x: labelPoint.x - 6, y: labelPoint.y - 9))
+            }
+
+            if let rightKey = spec.rightAngleAt,
+               let vertex = point(rightKey) {
+                let neighbors = neighborKeys(spec: spec, for: rightKey)
+                if neighbors.count >= 2,
+                   let p1 = point(neighbors[0]),
+                   let p2 = point(neighbors[1]) {
+                    let marker = min(drawSize.width, drawSize.height) * 0.08
+                    let u = normalized(CGPoint(x: p1.x - vertex.x, y: p1.y - vertex.y))
+                    let v = normalized(CGPoint(x: p2.x - vertex.x, y: p2.y - vertex.y))
+                    let a = CGPoint(x: vertex.x + u.x * marker, y: vertex.y + u.y * marker)
+                    let b = CGPoint(x: a.x + v.x * marker, y: a.y + v.y * marker)
+                    let c = CGPoint(x: vertex.x + v.x * marker, y: vertex.y + v.y * marker)
+                    context.cgContext.beginPath()
+                    context.cgContext.move(to: a)
+                    context.cgContext.addLine(to: b)
+                    context.cgContext.addLine(to: c)
+                    context.cgContext.strokePath()
+                }
+            }
         }
+    }
+
+    private func triangleCentroid(spec: TriangleDiagramSpec, padding: CGFloat, drawSize: CGSize) -> CGPoint {
+        let keys = ["A", "B", "C"]
+        let points = keys.compactMap { spec.points[$0] }
+        let source = points.isEmpty ? Array(spec.points.values) : points
+        let count = CGFloat(max(source.count, 1))
+        let sum = source.reduce(CGPoint.zero) { partial, point in
+            CGPoint(x: partial.x + CGFloat(point.x), y: partial.y + CGFloat(point.y))
+        }
+        let avg = CGPoint(x: sum.x / count, y: sum.y / count)
+        return CGPoint(
+            x: padding + avg.x * drawSize.width,
+            y: padding + avg.y * drawSize.height
+        )
+    }
+
+    private func neighborKeys(spec: TriangleDiagramSpec, for vertexKey: String) -> [String] {
+        var neighbors: [String] = []
+        for segment in spec.segments {
+            let chars = Array(segment)
+            guard chars.count == 2 else { continue }
+            let a = String(chars[0])
+            let b = String(chars[1])
+            if a == vertexKey {
+                neighbors.append(b)
+            } else if b == vertexKey {
+                neighbors.append(a)
+            }
+        }
+        if neighbors.count >= 2 {
+            return neighbors
+        }
+        let fallback = spec.points.keys.filter { $0 != vertexKey }
+        return neighbors + fallback
+    }
+
+    private func normalized(_ vector: CGPoint) -> CGPoint {
+        let length = max(sqrt(vector.x * vector.x + vector.y * vector.y), 0.0001)
+        return CGPoint(x: vector.x / length, y: vector.y / length)
     }
     #endif
 
