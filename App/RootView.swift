@@ -17,6 +17,7 @@ struct RootView: View {
         NavigationStack {
             CanvasSandboxView()
                 .toolbar {
+                    #if os(iOS)
                     ToolbarItem(placement: .topBarLeading) {
                         Text("SmartTutor")
                             .font(.headline)
@@ -26,6 +27,17 @@ struct RootView: View {
                             sessionStore.resetSession()
                         }
                     }
+                    #else
+                    ToolbarItem(placement: .automatic) {
+                        Text("SmartTutor")
+                            .font(.headline)
+                    }
+                    ToolbarItem(placement: .automatic) {
+                        Button("Reset") {
+                            sessionStore.resetSession()
+                        }
+                    }
+                    #endif
                 }
         }
     }
