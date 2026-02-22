@@ -10,6 +10,7 @@ import PencilKit
 #endif
 
 struct CanvasSandboxView: View {
+    @EnvironmentObject private var sessionStore: LearnerSessionStore
     private let accentColor = Color(red: 0.32, green: 0.64, blue: 0.66)
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var latestBase: TriangleBase?
@@ -117,6 +118,16 @@ struct CanvasSandboxView: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 6)
         }
+        #if os(iOS)
+        .safeAreaInset(edge: .top) {
+            TopMenuBar(
+                isShowingLearningHub: $isShowingLearningHub,
+                isLogExpanded: $isLogExpanded
+            )
+            .padding(.horizontal, 10)
+            .padding(.top, 6)
+        }
+        #endif
         .overlay(alignment: .bottomTrailing) {
             if DebugFlags.showLogOverlay && isLogExpanded {
                 LogOverlay(
@@ -142,23 +153,19 @@ struct CanvasSandboxView: View {
         }
         .navigationTitle("Canvas")
         .toolbar {
+            #if os(iOS)
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button("Learning Hub") {
-                        isShowingLearningHub = true
-                    }
-
-                    if DebugFlags.showLogOverlay {
-                        Button(isLogExpanded ? "Hide Logs" : "Show Logs") {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isLogExpanded.toggle()
-                            }
-                        }
-                    }
-                } label: {
-                    Image(systemName: "line.3.horizontal")
+                Button("Learning Hub") {
+                    isShowingLearningHub = true
                 }
             }
+            #else
+            ToolbarItem(placement: .automatic) {
+                Button("Learning Hub") {
+                    isShowingLearningHub = true
+                }
+            }
+            #endif
         }
         .navigationDestination(isPresented: $isShowingLearningHub) {
             ExercisesHomeView()
@@ -1411,6 +1418,50 @@ private struct LogOverlay: View {
                 .stroke(Color.black.opacity(0.08), lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 4)
+    }
+}
+
+private struct TopMenuBar: View {
+    @Binding var isShowingLearningHub: Bool
+    @Binding var isLogExpanded: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("SmartTutor")
+                .font(.headline.weight(.semibold))
+            Spacer()
+            Button("Logs") {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isLogExpanded.toggle()
+                }
+            }
+            .font(.callout.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                Capsule()
+                    .fill(Color.black.opacity(0.08))
+            )
+
+            Button("Learning Hub") {
+                isShowingLearningHub = true
+            }
+            .font(.callout.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                Capsule()
+                    .fill(Color.black.opacity(0.12))
+            )
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+        )
     }
 }
 

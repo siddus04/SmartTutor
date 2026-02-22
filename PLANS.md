@@ -52,11 +52,28 @@
   - `App/RootView.swift`
   - `App/AppConfig.swift`
   - `Features/Exercises/ExercisesHomeView.swift`
+  - `Features/Canvas/CanvasSandboxView.swift`
+- UX direction updates (M1-scoped):
+  - Post-onboarding and session-restore default route now lands directly on the learning canvas.
+  - Learning Hub is now treated as a secondary screen that is reachable from the canvas.
 - Manual test steps:
   1. Launch app with empty session data; verify onboarding appears and enforces Grade 6 + Geometry → Triangles.
-  2. Complete onboarding; verify learner session is initialized and app navigates to existing home links.
-  3. Relaunch app; verify session resumes deterministically without returning to onboarding.
+  2. Complete onboarding; verify learner session is initialized and app routes directly to canvas by default.
+  3. Relaunch app; verify session restores deterministically to canvas without returning to onboarding.
   4. Tap Reset in root toolbar; verify session clears and onboarding is shown again.
+  5. From canvas, open Learning Hub via its secondary entry point; verify hub is reachable but not the default landing screen.
+
+**Implementation notes (2026-02-22 — Learning Hub reframing):**
+- Files touched:
+  - `Features/Exercises/ExercisesHomeView.swift`
+  - `Features/Canvas/CanvasSandboxView.swift`
+  - `App/RootView.swift`
+- Manual test steps:
+  1. Launch with an existing learner session; verify canvas is now the first post-onboarding screen.
+  2. From canvas toolbar, tap **Learning Hub** and verify navigation opens the repurposed hub screen.
+  3. In Learning Hub, verify learner-facing sections and compact diagnostics (grade/topic/concept graph) are visible.
+  4. Tap **Continue Learning** and verify it returns to canvas.
+  5. Confirm hub only shows Grade 6 + Geometry → Triangles scope text with no out-of-scope options.
 
 **Implementation notes (2026-02-22 — Learning Hub reframing):**
 - Files touched:
@@ -82,6 +99,18 @@
   5. Confirm chat and canvas visible area is increased by removing always-visible Logs pill and extra title action.
 
 ---
+
+---
+**Implementation notes (2026-02-22, direct-to-canvas routing):**
+- Files touched:
+  - `App/RootView.swift`
+  - `Features/Canvas/CanvasSandboxView.swift`
+- Manual test steps:
+  1. Launch with no persisted learner session; verify onboarding is shown.
+  2. Complete onboarding; verify root routes directly to `CanvasSandboxView`.
+  3. Relaunch app with persisted session; verify it opens directly on canvas again.
+  4. Use canvas Reset toolbar button; verify `sessionStore.resetSession()` returns to onboarding deterministically.
+  5. In canvas, load a question and run check-answer flow; verify tutor + grading interactions still work.
 
 ### M2 — Curriculum Graph + Mastery Engine (Deterministic Rails)
 **Goal:** Implement concept progression and mastery as one integrated deterministic system.
