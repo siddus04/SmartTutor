@@ -1505,7 +1505,7 @@ private struct NavigationDrawer: View {
                 Spacer()
             }
             .padding(20)
-            .frame(width: 300, maxHeight: .infinity)
+            .frame(maxWidth: 300, maxHeight: .infinity, alignment: .leading)
             .background(.ultraThinMaterial)
             .overlay(alignment: .leading) {
                 Divider()
