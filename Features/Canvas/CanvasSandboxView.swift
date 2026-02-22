@@ -25,6 +25,7 @@ struct CanvasSandboxView: View {
     @State private var debugLog: String = ""
     @State private var isLogExpanded = false
     @State private var isShowingLearningHub = false
+    @State private var isShowingNavigationMenu = false
 
     var body: some View {
         ZStack {
@@ -118,16 +119,6 @@ struct CanvasSandboxView: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 6)
         }
-        #if os(iOS)
-        .safeAreaInset(edge: .top) {
-            TopMenuBar(
-                isShowingLearningHub: $isShowingLearningHub,
-                isLogExpanded: $isLogExpanded
-            )
-            .padding(.horizontal, 10)
-            .padding(.top, 6)
-        }
-        #endif
         .overlay(alignment: .bottomTrailing) {
             if DebugFlags.showLogOverlay && isLogExpanded {
                 LogOverlay(
@@ -151,22 +142,57 @@ struct CanvasSandboxView: View {
                 messages = [ChatMessage(text: "Tap “New Question” to start.", isAssistant: true)]
             }
         }
-        .navigationTitle("Canvas")
+        .navigationTitle("Smart Tutor")
         .toolbar {
             #if os(iOS)
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Learning Hub") {
-                    isShowingLearningHub = true
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isShowingNavigationMenu = true
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal")
                 }
+                .accessibilityLabel("Open Navigation Menu")
             }
             #else
             ToolbarItem(placement: .automatic) {
-                Button("Learning Hub") {
-                    isShowingLearningHub = true
+                Menu {
+                    Button("Learning Hub") {
+                        isShowingLearningHub = true
+                    }
+                    if DebugFlags.showLogOverlay {
+                        Button(isLogExpanded ? "Hide Logs" : "Show Logs") {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isLogExpanded.toggle()
+                            }
+                        }
+                    }
+                    Divider()
+                    Button("Reset Session", role: .destructive) {
+                        sessionStore.resetSession()
+                    }
+                } label: {
+                    Label("Menu", systemImage: "line.3.horizontal")
                 }
             }
             #endif
         }
+        #if os(iOS)
+        .sheet(isPresented: $isShowingNavigationMenu) {
+            NavigationDrawer(
+                isPresented: $isShowingNavigationMenu,
+                isShowingLearningHub: $isShowingLearningHub,
+                isLogExpanded: $isLogExpanded,
+                onReset: {
+                    sessionStore.resetSession()
+                }
+            )
+            .presentationDetents([.fraction(1.0)])
+            .presentationDragIndicator(.hidden)
+            .presentationBackground(.clear)
+        }
+        #endif
         .navigationDestination(isPresented: $isShowingLearningHub) {
             ExercisesHomeView()
         }
@@ -548,8 +574,6 @@ private struct TutorPane: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("AI Math Tutor")
-                    .font(.title2.weight(.semibold))
                 HStack(spacing: 6) {
                     Circle()
                         .fill(Color.green.opacity(0.6))
@@ -1421,47 +1445,90 @@ private struct LogOverlay: View {
     }
 }
 
-private struct TopMenuBar: View {
+private struct NavigationDrawer: View {
+    @Binding var isPresented: Bool
     @Binding var isShowingLearningHub: Bool
     @Binding var isLogExpanded: Bool
+    let onReset: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Text("SmartTutor")
-                .font(.headline.weight(.semibold))
-            Spacer()
-            Button("Logs") {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isLogExpanded.toggle()
+        ZStack(alignment: .trailing) {
+            Color.black.opacity(0.2)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    closeDrawer()
                 }
-            }
-            .font(.callout.weight(.semibold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .fill(Color.black.opacity(0.08))
-            )
 
-            Button("Learning Hub") {
-                isShowingLearningHub = true
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    Text("Navigation")
+                        .font(.headline.weight(.semibold))
+                    Spacer()
+                    Button {
+                        closeDrawer()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.body.weight(.semibold))
+                    }
+                }
+
+                Group {
+                    Button {
+                        isShowingLearningHub = true
+                        closeDrawer()
+                    } label: {
+                        drawerRow(title: "Learning Hub", systemName: "book.closed")
+                    }
+
+                    if DebugFlags.showLogOverlay {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isLogExpanded.toggle()
+                            }
+                            closeDrawer()
+                        } label: {
+                            drawerRow(title: isLogExpanded ? "Hide Logs" : "Show Logs", systemName: "doc.text.magnifyingglass")
+                        }
+                    }
+
+                    Button {
+                        onReset()
+                        closeDrawer()
+                    } label: {
+                        drawerRow(title: "Reset Session", systemName: "arrow.counterclockwise")
+                    }
+
+                    drawerRow(title: "Account (Coming Soon)", systemName: "person.crop.circle", isEnabled: false)
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
             }
-            .font(.callout.weight(.semibold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .fill(Color.black.opacity(0.12))
-            )
+            .padding(20)
+            .frame(width: 300, maxHeight: .infinity)
+            .background(.ultraThinMaterial)
+            .overlay(alignment: .leading) {
+                Divider()
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.black.opacity(0.08), lineWidth: 1)
-        )
+    }
+
+    private func drawerRow(title: String, systemName: String, isEnabled: Bool = true) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemName)
+                .frame(width: 20)
+            Text(title)
+                .font(.body.weight(.medium))
+            Spacer()
+        }
+        .foregroundStyle(isEnabled ? Color.primary : Color.secondary)
+        .padding(.vertical, 10)
+    }
+
+    private func closeDrawer() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isPresented = false
+        }
     }
 }
 
