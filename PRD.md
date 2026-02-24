@@ -433,3 +433,56 @@ True mastery progression, not random question generation
 
 Canvas-native conceptual assessment
 
+---Updated PRD----
+            
+            LLM-Powered Difficulty Engine (MVP)
+
+            For MVP, difficulty assignment is delegated to the LLM tutor using a structured rubric.
+
+            The generation pipeline includes:
+
+            LLM Question Generator
+
+            Produces a QuestionSpec for a given concept_id, grade, and target direction (easier/same/harder).
+
+            LLM Difficulty Rater (separate function)
+
+            Rates the generated QuestionSpec using a rubric.
+
+            Outputs structured difficulty scores:
+
+            overall (1–4)
+
+            dimensions: visual, language, reasoning_steps, numeric
+
+            grade_fit (ok / not ok + notes)
+
+            System Accept/Retry Policy
+
+            If rated difficulty falls within requested band → accept.
+
+            Otherwise → retry generation (max N attempts).
+
+            Fallback to stub provider if invalid after retries.
+
+            Deterministic Safety Constraints
+
+            Grade 6 cap enforced (no trig, no proofs, bounded numeric complexity).
+
+            Concept must exist in ontology.
+
+            Interaction type must be supported.
+
+            Diagram spec must be renderable.
+
+            Progression Remains Deterministic
+
+            MasteryEngine decides concept and difficulty direction.
+
+            LLM does NOT decide progression or unlock concepts.
+
+            Empirical Calibration
+
+            Out of scope for MVP.
+
+            Telemetry logged for future calibration phase.

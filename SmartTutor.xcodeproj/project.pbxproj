@@ -21,6 +21,10 @@
 		38E5B28E2F48ACC0004B0B2E /* TriangleSnapshotter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B28D2F48ACC0004B0B2E /* TriangleSnapshotter.swift */; };
 		38E5B28F2F48ACC0004B0B2E /* TriangleAIChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B28C2F48ACC0004B0B2E /* TriangleAIChecker.swift */; };
 		38E5B2932F49D067004B0B2E /* VisionPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2922F49D067004B0B2E /* VisionPipeline.swift */; };
+		38E5B2A92F4D81AB004B0B2E /* CurriculumGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2A62F4D81AB004B0B2E /* CurriculumGraph.swift */; };
+		38E5B2AA2F4D81AB004B0B2E /* MasteryEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2A72F4D81AB004B0B2E /* MasteryEngine.swift */; };
+		38E5B2AB2F4D81AB004B0B2E /* StubQuestionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2A82F4D81AB004B0B2E /* StubQuestionProvider.swift */; };
+		38E5B2AD2F4D8804004B0B2E /* PRD.md in Resources */ = {isa = PBXBuildFile; fileRef = 38E5B2AC2F4D8804004B0B2E /* PRD.md */; };
 		38F100012F50000100AA0001 /* LearnerSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F100112F50000100AA0001 /* LearnerSession.swift */; };
 		38F100022F50000100AA0001 /* LearnerSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F100122F50000100AA0001 /* LearnerSessionStore.swift */; };
 		38F100032F50000100AA0001 /* OnboardingFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F100132F50000100AA0001 /* OnboardingFlowView.swift */; };
@@ -63,6 +67,10 @@
 		38E5B28C2F48ACC0004B0B2E /* TriangleAIChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriangleAIChecker.swift; sourceTree = "<group>"; };
 		38E5B28D2F48ACC0004B0B2E /* TriangleSnapshotter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriangleSnapshotter.swift; sourceTree = "<group>"; };
 		38E5B2922F49D067004B0B2E /* VisionPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionPipeline.swift; sourceTree = "<group>"; };
+		38E5B2A62F4D81AB004B0B2E /* CurriculumGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurriculumGraph.swift; sourceTree = "<group>"; };
+		38E5B2A72F4D81AB004B0B2E /* MasteryEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasteryEngine.swift; sourceTree = "<group>"; };
+		38E5B2A82F4D81AB004B0B2E /* StubQuestionProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StubQuestionProvider.swift; sourceTree = "<group>"; };
+		38E5B2AC2F4D8804004B0B2E /* PRD.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PRD.md; sourceTree = "<group>"; };
 		38F100112F50000100AA0001 /* LearnerSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearnerSession.swift; sourceTree = "<group>"; };
 		38F100122F50000100AA0001 /* LearnerSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearnerSessionStore.swift; sourceTree = "<group>"; };
 		38F100132F50000100AA0001 /* OnboardingFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlowView.swift; sourceTree = "<group>"; };
@@ -116,6 +124,7 @@
 		3856ACCD2F2CA2DB00CC610B = {
 			isa = PBXGroup;
 			children = (
+				38E5B2AC2F4D8804004B0B2E /* PRD.md */,
 				3856AD0A2F2CA47700CC610B /* Core */,
 				3856AD062F2CA45500CC610B /* Features */,
 				3856AD042F2CA42B00CC610B /* App */,
@@ -149,15 +158,6 @@
 			path = App;
 			sourceTree = "<group>";
 		};
-		38F100212F50000100AA0001 /* Session */ = {
-			isa = PBXGroup;
-			children = (
-				38F100112F50000100AA0001 /* LearnerSession.swift */,
-				38F100122F50000100AA0001 /* LearnerSessionStore.swift */,
-			);
-			path = Session;
-			sourceTree = "<group>";
-		};
 		3856AD062F2CA45500CC610B /* Features */ = {
 			isa = PBXGroup;
 			children = (
@@ -167,16 +167,6 @@
 				38F100222F50000100AA0001 /* Onboarding */,
 			);
 			path = Features;
-			sourceTree = "<group>";
-		};
-		38F100222F50000100AA0001 /* Onboarding */ = {
-			isa = PBXGroup;
-			children = (
-				38F100132F50000100AA0001 /* OnboardingFlowView.swift */,
-				38F100142F50000100AA0001 /* GradeSelectionView.swift */,
-				38F100152F50000100AA0001 /* TopicSelectionView.swift */,
-			);
-			path = Onboarding;
 			sourceTree = "<group>";
 		};
 		3856AD072F2CA45D00CC610B /* Exercises */ = {
@@ -190,6 +180,9 @@
 		3856AD082F2CA46700CC610B /* Canvas */ = {
 			isa = PBXGroup;
 			children = (
+				38E5B2A62F4D81AB004B0B2E /* CurriculumGraph.swift */,
+				38E5B2A72F4D81AB004B0B2E /* MasteryEngine.swift */,
+				38E5B2A82F4D81AB004B0B2E /* StubQuestionProvider.swift */,
 				38E5B2922F49D067004B0B2E /* VisionPipeline.swift */,
 				38E5B28C2F48ACC0004B0B2E /* TriangleAIChecker.swift */,
 				38E5B28D2F48ACC0004B0B2E /* TriangleSnapshotter.swift */,
@@ -238,6 +231,25 @@
 			children = (
 			);
 			path = Utilities;
+			sourceTree = "<group>";
+		};
+		38F100212F50000100AA0001 /* Session */ = {
+			isa = PBXGroup;
+			children = (
+				38F100112F50000100AA0001 /* LearnerSession.swift */,
+				38F100122F50000100AA0001 /* LearnerSessionStore.swift */,
+			);
+			path = Session;
+			sourceTree = "<group>";
+		};
+		38F100222F50000100AA0001 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				38F100132F50000100AA0001 /* OnboardingFlowView.swift */,
+				38F100142F50000100AA0001 /* GradeSelectionView.swift */,
+				38F100152F50000100AA0001 /* TopicSelectionView.swift */,
+			);
+			path = Onboarding;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -361,6 +373,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3856AD032F2CA37700CC610B /* run-ios-sim.sh in Resources */,
+				38E5B2AD2F4D8804004B0B2E /* PRD.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -399,6 +412,9 @@
 				38E5B2612F489508004B0B2E /* AppConfig.swift in Sources */,
 				3856AD182F2DD48E00CC610B /* ExercisesHomeView.swift in Sources */,
 				38E5B28E2F48ACC0004B0B2E /* TriangleSnapshotter.swift in Sources */,
+				38E5B2A92F4D81AB004B0B2E /* CurriculumGraph.swift in Sources */,
+				38E5B2AA2F4D81AB004B0B2E /* MasteryEngine.swift in Sources */,
+				38E5B2AB2F4D81AB004B0B2E /* StubQuestionProvider.swift in Sources */,
 				38E5B28F2F48ACC0004B0B2E /* TriangleAIChecker.swift in Sources */,
 				3856AD162F2DD48400CC610B /* SmartTutorApp.swift in Sources */,
 				38E5B2892F4899ED004B0B2E /* TriangleDiagramView.swift in Sources */,
