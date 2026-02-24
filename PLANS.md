@@ -370,3 +370,22 @@
 
 ### Status estimate
 - Current repo appears to be **foundation stage with partial M4/M5 building blocks**; sequence-critical work is M1 → M2 → M3 next.
+
+---
+**Implementation notes (2026-02-24, M2 deterministic mastery + stub/simulator):**
+- Files touched:
+  - `App/AppConfig.swift`
+  - `App/Session/LearnerSession.swift`
+  - `App/Session/LearnerSessionStore.swift`
+  - `Features/Canvas/TriangleModels.swift`
+  - `Features/Canvas/CanvasSandboxView.swift`
+  - `Features/Canvas/CurriculumGraph.swift` (new)
+  - `Features/Canvas/MasteryEngine.swift` (new)
+  - `Features/Canvas/StubQuestionProvider.swift` (new)
+  - `SmartTutorTests/MasteryEngineTests.swift` (new)
+- Manual test steps:
+  1. Launch app, complete onboarding with Grade 6 + Triangles, tap **New Question** and confirm a deterministic stub question is shown with concept + difficulty text.
+  2. Draw/circle the expected side and tap **Check Answer** repeatedly; verify log overlay shows mastery counters and difficulty ramp.
+  3. Answer incorrectly once; verify difficulty decreases and remediation is logged/selected next.
+  4. Open hamburger menu and run **Run Mastery Simulator**; verify logs show scripted deterministic transitions and progression updates.
+  5. Continue attempts until completion and verify completion message is displayed deterministically.

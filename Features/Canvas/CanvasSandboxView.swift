@@ -26,6 +26,8 @@ struct CanvasSandboxView: View {
     @State private var isLogExpanded = false
     @State private var isShowingLearningHub = false
     @State private var isShowingNavigationMenu = false
+    private let curriculumGraph = CurriculumGraph.trianglesGrade6
+    private let stubQuestionProvider: TriangleQuestionProviding = StubQuestionProvider()
 
     var body: some View {
         ZStack {
@@ -47,6 +49,8 @@ struct CanvasSandboxView: View {
                             accentColor: accentColor,
                             latestBase: $latestBase,
                             messages: $messages,
+                            onGenerateQuestion: { await generateDeterministicQuestion() },
+                            onRunMasterySimulation: { runMasterySimulator() },
                             onQuestionLoaded: {
                                 canvasResetID = UUID()
                                 selectedSegment = nil
@@ -84,6 +88,8 @@ struct CanvasSandboxView: View {
                             accentColor: accentColor,
                             latestBase: $latestBase,
                             messages: $messages,
+                            onGenerateQuestion: { await generateDeterministicQuestion() },
+                            onRunMasterySimulation: { runMasterySimulator() },
                             onQuestionLoaded: {
                                 canvasResetID = UUID()
                                 selectedSegment = nil
@@ -184,6 +190,7 @@ struct CanvasSandboxView: View {
                 isPresented: $isShowingNavigationMenu,
                 isShowingLearningHub: $isShowingLearningHub,
                 isLogExpanded: $isLogExpanded,
+                onRunMasterySimulation: { runMasterySimulator() },
                 onReset: {
                     sessionStore.resetSession()
                 }
@@ -198,6 +205,92 @@ struct CanvasSandboxView: View {
         }
     }
 
+
+
+    private func generateDeterministicQuestion() async -> TriangleResponse? {
+        guard let session = sessionStore.session else {
+            appendLog("No learner session found.")
+            return nil
+        }
+
+        let step = MasteryEngine.nextLearningStep(state: session.progression, graph: curriculumGraph)
+        if step.isComplete {
+            await MainActor.run {
+                messages = [ChatMessage(text: "🎉 You completed Triangles M2 progression.", isAssistant: true)]
+                latestBase = nil
+            }
+            appendLog("Progression completed: no further concepts.")
+            return nil
+        }
+
+        guard let conceptId = step.conceptId, let difficulty = step.difficulty else {
+            appendLog("Missing concept/difficulty in next learning step.")
+            return nil
+        }
+
+        do {
+            let response: TriangleResponse
+            if AppConfig.useStubQuestionProvider {
+                response = try await stubQuestionProvider.generateQuestion(conceptId: conceptId, difficulty: difficulty, intent: step.intent)
+            } else {
+                response = try await TriangleAPI.generateQuestion()
+            }
+            appendLog("Loaded concept=\(conceptId) difficulty=\(difficulty) intent=\(step.intent.rawValue)")
+            return response
+        } catch {
+            appendLog("Question generation failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func updateMasteryAfterCheck(expected: String, detected: String?, ambiguity: Double) {
+        guard let session = sessionStore.session else { return }
+        let conceptId = latestBase?.conceptId ?? session.progression.currentConceptId
+        guard let conceptId else { return }
+
+        let outcome: MasteryOutcome
+        if ambiguity >= 0.6 || detected == nil {
+            outcome = .ambiguous
+        } else if detected == expected {
+            outcome = .correct
+        } else {
+            outcome = .incorrect
+        }
+
+        sessionStore.updateProgression { progression in
+            MasteryEngine.applyOutcome(state: &progression, graph: curriculumGraph, conceptId: conceptId, outcome: outcome)
+        }
+
+        if let mastery = sessionStore.session?.progression.masteryByConcept[conceptId] {
+            appendLog("Mastery \(conceptId): c=\(mastery.correctCount) i=\(mastery.incorrectCount) d=\(mastery.currentDifficulty) mastered=\(mastery.mastered) remediation=\(mastery.needsRemediation)")
+        }
+    }
+
+    private func runMasterySimulator() {
+        guard DebugFlags.showMasterySimulator else { return }
+        guard let session = sessionStore.session else {
+            appendLog("Simulator aborted: no session")
+            return
+        }
+        var progression = session.progression
+        let script: [MasteryOutcome] = [.correct, .correct, .incorrect, .correct, .correct, .correct, .ambiguous, .correct]
+
+        appendLog("Simulator start: script=\(script.count) steps")
+        for (index, outcome) in script.enumerated() {
+            let step = MasteryEngine.nextLearningStep(state: progression, graph: curriculumGraph)
+            guard let conceptId = step.conceptId else {
+                appendLog("Simulator complete at step \(index + 1)")
+                break
+            }
+            MasteryEngine.applyOutcome(state: &progression, graph: curriculumGraph, conceptId: conceptId, outcome: outcome)
+            let mastery = progression.masteryByConcept[conceptId]
+            appendLog("Sim#\(index + 1) concept=\(conceptId) outcome=\(String(describing: outcome)) d=\(mastery?.currentDifficulty ?? 0) mastered=\(mastery?.mastered ?? false)")
+        }
+
+        sessionStore.updateProgression { state in
+            state = progression
+        }
+    }
     private func handleCheckAnswer() {
         guard !isCheckingAI else { return }
         guard let base = latestBase else {
@@ -244,11 +337,16 @@ struct CanvasSandboxView: View {
                         selectedSegment = nil
                     }
                 }
+                await MainActor.run {
+                    updateMasteryAfterCheck(expected: expected, detected: detected, ambiguity: result.ambiguityScore)
+                }
             } else {
                 await MainActor.run {
                     messages.append(ChatMessage(text: "I can’t tell which side you circled—try circling just ONE side clearly.", isAssistant: true))
                     canvasController.clear()
                     selectedSegment = nil
+                    let expected = base.answer?.value ?? "AB"
+                    updateMasteryAfterCheck(expected: expected, detected: result.detectedSegment, ambiguity: result.ambiguityScore)
                 }
             }
 
@@ -553,6 +651,8 @@ private struct TutorPane: View {
     let accentColor: Color
     @Binding var latestBase: TriangleBase?
     @Binding var messages: [ChatMessage]
+    let onGenerateQuestion: () async -> TriangleResponse?
+    let onRunMasterySimulation: () -> Void
     let onQuestionLoaded: () -> Void
 
     var body: some View {
@@ -584,29 +684,42 @@ private struct TutorPane: View {
                 }
             }
             Spacer()
-            Button(action: {
-                Task { await generateQuestion() }
-            }) {
-                Group {
-                    if isGenerating {
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                            .tint(accentColor)
-                    } else {
-                        Text("New Question")
-                            .font(.callout.weight(.semibold))
+            HStack(spacing: 8) {
+                if DebugFlags.showMasterySimulator {
+                    Button("Sim") {
+                        onRunMasterySimulation()
                     }
+                    .font(.callout.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(accentColor.opacity(0.12)))
+                    .foregroundStyle(accentColor)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    Capsule()
-                        .fill(accentColor.opacity(0.15))
-                )
+
+                Button(action: {
+                    Task { await generateQuestion() }
+                }) {
+                    Group {
+                        if isGenerating {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .tint(accentColor)
+                        } else {
+                            Text("New Question")
+                                .font(.callout.weight(.semibold))
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(accentColor.opacity(0.15))
+                    )
+                }
+                .foregroundStyle(accentColor)
+                .disabled(isGenerating)
+                .opacity(isGenerating ? 0.6 : 1.0)
             }
-            .foregroundStyle(accentColor)
-            .disabled(isGenerating)
-            .opacity(isGenerating ? 0.6 : 1.0)
         }
     }
 
@@ -690,16 +803,17 @@ private struct TutorPane: View {
         isGenerating = true
         didFailToGenerate = false
         messages = [ChatMessage(text: "Generating a new question...", isAssistant: true)]
-        do {
-            let response = try await TriangleAPI.generateQuestion()
+        if let response = await onGenerateQuestion() {
             messages = response.base.tutorMessages.map {
                 ChatMessage(text: $0.text, isAssistant: $0.role != "user")
             }
             latestBase = response.base
             onQuestionLoaded()
-        } catch {
-            messages = [ChatMessage(text: "I couldn't load a new question. Try again.", isAssistant: true)]
-            didFailToGenerate = true
+        } else {
+            if latestBase == nil {
+                messages = [ChatMessage(text: "I couldn't load a new question. Try again.", isAssistant: true)]
+                didFailToGenerate = true
+            }
         }
         isGenerating = false
     }
@@ -1449,6 +1563,7 @@ private struct NavigationDrawer: View {
     @Binding var isPresented: Bool
     @Binding var isShowingLearningHub: Bool
     @Binding var isLogExpanded: Bool
+    let onRunMasterySimulation: () -> Void
     let onReset: () -> Void
 
     var body: some View {
@@ -1488,6 +1603,15 @@ private struct NavigationDrawer: View {
                             closeDrawer()
                         } label: {
                             drawerRow(title: isLogExpanded ? "Hide Logs" : "Show Logs", systemName: "doc.text.magnifyingglass")
+                        }
+                    }
+
+                    if DebugFlags.showMasterySimulator {
+                        Button {
+                            onRunMasterySimulation()
+                            closeDrawer()
+                        } label: {
+                            drawerRow(title: "Run Mastery Simulator", systemName: "bolt.horizontal.circle")
                         }
                     }
 

@@ -14,11 +14,33 @@ struct TriangleBase: Codable {
     let tutorMessages: [TriangleTutorMessage]
     let diagramSpec: TriangleDiagramSpec?
     let answer: TriangleAnswer?
+    let conceptId: String?
+    let difficulty: Int?
+    let intent: String?
 
     enum CodingKeys: String, CodingKey {
         case tutorMessages = "tutor_messages"
         case diagramSpec = "diagram_spec"
         case answer
+        case conceptId = "concept_id"
+        case difficulty
+        case intent
+    }
+
+    init(
+        tutorMessages: [TriangleTutorMessage],
+        diagramSpec: TriangleDiagramSpec?,
+        answer: TriangleAnswer?,
+        conceptId: String? = nil,
+        difficulty: Int? = nil,
+        intent: String? = nil
+    ) {
+        self.tutorMessages = tutorMessages
+        self.diagramSpec = diagramSpec
+        self.answer = answer
+        self.conceptId = conceptId
+        self.difficulty = difficulty
+        self.intent = intent
     }
 }
 
