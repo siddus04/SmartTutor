@@ -163,38 +163,55 @@
 
 ---
 
-### M3 — LLM Contract + Validation Gate (Before Interaction Expansion)
-**Goal:** Lock strict LLM schema/validation so only safe, in-scope structured specs can drive UX.
+### M3 — LLM Question Planner + Validation Layer
+**Status:** Implemented
+
+**Goal:** Add a validated LLM-driven question pipeline (generate + independently rate + accept/retry + fallback) while preserving M2 progression behavior.
 
 **Build:**
-- Definstrict JSON contracts for question bundle:
-  - diagram spec,
-  - question prompt,
-  - answer key,
-  - hints,
-  - explanation,
-  - real-world application,
-  - interaction mode.
-- Add schema validation + sanitization + fallback policy.
-- Add ontology guardrails (triangles-only, no conceptual leap beyond current concept/grade).
-- Ensure invalid LLM output is rejected before rendering/grading.
+- Added strict M3 JSON contracts in app/backend:
+  - `QuestionSpec` (generator output)
+  - `DifficultyRating` (independent rater output)
+- Added `ValidatedLLMQuestionProvider` that orchestrates:
+  1) generate candidate,
+  2) deterministic validation,
+  3) independent difficulty rating,
+  4) accept/retry,
+  5) fallback to `StubQuestionProvider`.
+- Enforced deterministic hard gates:
+  - ontology concept check (Triangles MVP only),
+  - allowed interaction type,
+  - Grade 6 cap checks,
+  - diagram renderability checks,
+  - answer/interaction compatibility checks.
+- Added minimal telemetry logs for attempt/rating/reject/fallback.
+- Preserved M2 rules: MasteryEngine progression/unlock logic unchanged.
 
-**Files touched (planned):**
-- `backend/app/api/triangles/check/route.ts`
-- `Features/Canvas/TriangleAPI.swift`
+**Files touched:**
 - `Features/Canvas/TriangleModels.swift`
-- `SmartTutorTests/SmartTutorTests.swift`
+- `Features/Canvas/TriangleAPI.swift`
+- `Features/Canvas/ValidatedLLMQuestionProvider.swift`
+- `Features/Canvas/CanvasSandboxView.swift`
+- `backend/app/lib/m3.ts`
+- `backend/app/api/triangles/generate/route.ts`
+- `backend/app/api/triangles/rate/route.ts`
+- `SmartTutorTests/M3ValidationTests.swift`
+- `PLANS.md`
 
 **Manual test steps:**
-1. Send valid schema payload; verify render pipeline accepts it.
-2. Send malformed JSON/missing fields; verify fallback response and no crash.
-3. Send out-of-scope concept prompt; verify block/rewrite behavior.
-4. Confirm deterministic mapping from validated spec to rendered output.
+1. Disable stub mode (`AppConfig.useStubQuestionProvider = false`) and generate a question; verify accepted candidate renders and grading flow still works.
+2. Force malformed/invalid `QuestionSpec` from backend; verify retries occur and final fallback returns stub question with no crash.
+3. Force out-of-scope concept or disallowed interaction type in generated payload; verify deterministic rejection and no renderer exposure.
+4. Force difficulty mismatch (outside target band); verify reject/retry then accept or fallback.
+5. Verify logs include: attempt index, rater overall/dimensions, reject reason, retries count, fallback flag.
+6. Verify progression and unlocking behavior remains unchanged by completing mastery steps (M2 expectations still pass).
 
 **Acceptance criteria:**
-- Strict schema gate exists and is enforced.
-- No unvalidated LLM output reaches UI rendering.
-- Out-of-scope concepts are blocked per PRD scope.
+- Generator and rater outputs are strict-schema validated.
+- Rater output is the source of truth for accept/retry decisions.
+- Invalid/unsafe LLM outputs are blocked before renderer/grader.
+- Retries and fallback are deterministic and bounded.
+- M2 progression/unlock logic remains unchanged.
 
 ---
 

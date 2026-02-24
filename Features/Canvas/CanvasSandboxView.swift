@@ -27,7 +27,7 @@ struct CanvasSandboxView: View {
     @State private var isShowingLearningHub = false
     @State private var isShowingNavigationMenu = false
     private let curriculumGraph = CurriculumGraph.trianglesGrade6
-    private let stubQuestionProvider: TriangleQuestionProviding = StubQuestionProvider()
+    private let questionProvider: TriangleQuestionProviding = AppConfig.useStubQuestionProvider ? StubQuestionProvider() : ValidatedLLMQuestionProvider()
 
     var body: some View {
         ZStack {
@@ -229,12 +229,7 @@ struct CanvasSandboxView: View {
         }
 
         do {
-            let response: TriangleResponse
-            if AppConfig.useStubQuestionProvider {
-                response = try await stubQuestionProvider.generateQuestion(conceptId: conceptId, difficulty: difficulty, intent: step.intent)
-            } else {
-                response = try await TriangleAPI.generateQuestion()
-            }
+            let response = try await questionProvider.generateQuestion(conceptId: conceptId, difficulty: difficulty, intent: step.intent)
             appendLog("Loaded concept=\(conceptId) difficulty=\(difficulty) intent=\(step.intent.rawValue)")
             return response
         } catch {
