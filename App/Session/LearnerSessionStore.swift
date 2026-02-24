@@ -30,6 +30,13 @@ final class LearnerSessionStore: ObservableObject {
                 return
             }
 
+            if decoded.progression.masteryByConcept.isEmpty {
+                decoded.progression = MasteryEngine.bootstrapProgression(
+                    graph: .trianglesGrade6,
+                    ceiling: SessionStorage.grade6DifficultyCeiling
+                )
+            }
+
             decoded.sessionMeta.lastOpenedAtISO8601 = SessionStorage.timestampString(for: Date())
             session = decoded
             persistSession(decoded)
@@ -45,11 +52,9 @@ final class LearnerSessionStore: ObservableObject {
         let created = LearnerSession(
             learner: LearnerProfile(grade: grade),
             curriculum: CurriculumSelection(subject: .geometry, topic: topic),
-            progression: ProgressionState(
-                conceptGraphId: SessionStorage.defaultConceptGraphID,
-                masteryByConcept: [:],
-                currentConceptId: nil,
-                difficultyCeiling: DifficultyCeiling(maxLevel: SessionStorage.grade6DifficultyCeiling)
+            progression: MasteryEngine.bootstrapProgression(
+                graph: .trianglesGrade6,
+                ceiling: SessionStorage.grade6DifficultyCeiling
             ),
             sessionMeta: SessionMeta(
                 schemaVersion: SessionStorage.schemaVersion,
@@ -62,6 +67,14 @@ final class LearnerSessionStore: ObservableObject {
         persistSession(created)
     }
 
+
+    func updateProgression(_ update: (inout ProgressionState) -> Void) {
+        guard var existing = session else { return }
+        update(&existing.progression)
+        existing.sessionMeta.lastOpenedAtISO8601 = SessionStorage.timestampString(for: Date())
+        session = existing
+        persistSession(existing)
+    }
     func resetSession() {
         defaults.removeObject(forKey: SessionStorage.sessionKey)
         session = nil
