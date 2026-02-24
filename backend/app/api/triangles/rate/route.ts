@@ -1,4 +1,4 @@
-import { rateWithLLM, validateDifficultyRating, validateQuestionSpec, type QuestionSpec } from "@/app/lib/m3";
+import { rateWithLLM, validateDifficultyRating, validateQuestionSpec, type QuestionSpec } from "../../../lib/m3";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",

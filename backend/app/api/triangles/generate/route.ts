@@ -1,4 +1,4 @@
-import { generateWithLLM, validateQuestionSpec } from "@/app/lib/m3";
+import { generateWithLLM, validateQuestionSpec } from "../../../lib/m3";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
