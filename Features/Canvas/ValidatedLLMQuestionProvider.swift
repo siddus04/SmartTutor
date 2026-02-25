@@ -1,30 +1,5 @@
 import Foundation
 
-struct DifficultyTarget {
-    let band: ClosedRange<Int>?
-    let direction: DifficultyDirection?
-
-    static func from(intent: LearningIntent, difficulty: Int) -> DifficultyTarget {
-        let clamped = min(max(difficulty, 1), SessionStorage.grade6DifficultyCeiling)
-        let direction: DifficultyDirection
-        switch intent {
-        case .remediate:
-            direction = .easier
-        case .teach, .practice:
-            direction = .same
-        case .assess:
-            direction = .harder
-        }
-        return DifficultyTarget(band: clamped...clamped, direction: direction)
-    }
-}
-
-enum DifficultyDirection: String, Codable {
-    case easier
-    case same
-    case harder
-}
-
 struct QuestionPipelineTelemetry {
     let requestId: String
     let conceptId: String
@@ -314,7 +289,7 @@ enum QuestionSpecValidator {
         }
     }
 
-    private static func buildSemanticTextPool(_ question: QuestionSpec) -> String {
+    nonisolated private static func buildSemanticTextPool(_ question: QuestionSpec) -> String {
         let optionsText = question.responseContract.options?.map(\.text).joined(separator: " ") ?? ""
         return normalizeSignal([
             question.prompt,
@@ -326,7 +301,7 @@ enum QuestionSpecValidator {
         ].joined(separator: " "))
     }
 
-    private static func normalizeSignal(_ text: String) -> String {
+    nonisolated private static func normalizeSignal(_ text: String) -> String {
         text
             .lowercased()
             .replacingOccurrences(of: #"[^a-z0-9²+ ]"#, with: "", options: .regularExpression)
@@ -334,7 +309,7 @@ enum QuestionSpecValidator {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func isGenericRepetition(_ question: QuestionSpec) -> Bool {
+    nonisolated private static func isGenericRepetition(_ question: QuestionSpec) -> Bool {
         let normalizedBlocks = [question.prompt, question.hint, question.explanation].map(normalizeSignal)
         let uniqueBlocks = Set(normalizedBlocks.filter { !$0.isEmpty })
         if uniqueBlocks.count <= 1 {

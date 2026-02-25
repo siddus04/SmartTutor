@@ -1,6 +1,31 @@
 import Foundation
 import CryptoKit
 
+struct DifficultyTarget {
+    let band: ClosedRange<Int>?
+    let direction: DifficultyDirection?
+
+    static func from(intent: LearningIntent, difficulty: Int) -> DifficultyTarget {
+        let clamped = min(max(difficulty, 1), SessionStorage.grade6DifficultyCeiling)
+        let direction: DifficultyDirection
+        switch intent {
+        case .remediate:
+            direction = .easier
+        case .teach, .practice:
+            direction = .same
+        case .assess:
+            direction = .harder
+        }
+        return DifficultyTarget(band: clamped...clamped, direction: direction)
+    }
+}
+
+enum DifficultyDirection: String, Codable {
+    case easier
+    case same
+    case harder
+}
+
 protocol TriangleAPIClient {
     func generateQuestion(conceptId: String, grade: Int, target: DifficultyTarget, allowedInteractionTypes: [String]) async throws -> GeneratedQuestionEnvelope
     func rateDifficulty(questionSpec: QuestionSpec, grade: Int) async throws -> DifficultyRating

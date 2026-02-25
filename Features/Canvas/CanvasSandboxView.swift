@@ -29,7 +29,7 @@ struct CanvasSandboxView: View {
     @State private var isShowingLearningHub = false
     @State private var isShowingNavigationMenu = false
     private let curriculumGraph = CurriculumGraph.trianglesGrade6
-    private let questionProvider: TriangleQuestionProviding = AppConfig.useStubQuestionProvider ? StubQuestionProvider() : ValidatedLLMQuestionProvider()
+    private let questionProvider: TriangleQuestionProviding = StubQuestionProvider()
 
     var body: some View {
         ZStack {
