@@ -1,4 +1,4 @@
-import { generateWithLLM, normalizeLearnerContext, validateNovelty, validateQuestionSpec } from "../../../lib/m3";
+import { InvalidQuestionSpecError, generateWithLLM, normalizeLearnerContext, validateNovelty, validateQuestionSpec } from "../../../lib/m3";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",

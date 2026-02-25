@@ -110,6 +110,7 @@ struct TrianglePoint: Codable {
 struct QuestionSpec: Codable {
     let schemaVersion: String
     let questionId: String
+    var questionFamily: String? = nil
     let conceptId: String
     let grade: Int
     let interactionType: String
@@ -124,6 +125,7 @@ struct QuestionSpec: Codable {
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
         case questionId = "question_id"
+        case questionFamily = "question_family"
         case conceptId = "concept_id"
         case grade
         case interactionType = "interaction_type"

@@ -486,3 +486,19 @@
   1. Run `xcodebuild test -scheme SmartTutor -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:SmartTutorTests/InteractionPolicyTests` and verify policy mapping tests pass.
   2. Trigger question generation for a basics concept and inspect logs/request payload to confirm `allowed_interaction_types` includes `highlight` + `multiple_choice`.
   3. Trigger question generation for a Pythagoras concept and inspect logs/request payload to confirm `numeric_input` is included (with `highlight` only for relevant concepts).
+
+**Implementation notes (2026-02-26 — M3.1 pipeline hardening for concept relevance & diversity):**
+- Files touched:
+  - `backend/app/lib/m3.ts`
+  - `Features/Canvas/TriangleAPI.swift`
+  - `Features/Canvas/TriangleModels.swift`
+  - `Features/Canvas/ValidatedLLMQuestionProvider.swift`
+  - `Features/Canvas/StubQuestionProvider.swift`
+  - `Features/Canvas/CanvasSandboxView.swift`
+  - `SmartTutorTests/InteractionPolicyTests.swift`
+- Manual test steps:
+  1. Launch app and generate questions across 3+ different concept IDs; verify prompt style changes by concept family (not only side selection).
+  2. Force server fallback (disable API key) and confirm fallback questions still vary by concept and interaction mode.
+  3. Answer several questions repeatedly in same concept; verify novelty rejects repeated families and rotates interaction types when possible.
+  4. Relaunch app and generate a new question; verify learner context history persists and is sent in request payload.
+  5. Run unit tests to confirm difficulty tolerance accepts near-target ratings and prevents avoidable fallback.
