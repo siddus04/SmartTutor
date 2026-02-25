@@ -262,6 +262,10 @@
   - Clean-cut schema migration to `m3.question_spec.v2` with `response_contract`.
   - Add mode-specific validation rails for highlight/multiple_choice/numeric_input.
   - Keep current canvas runtime constrained to highlight interaction until M4 UI modes are implemented.
+- M3.1d:
+  - Add per-concept contract table in backend LLM generator (objective, answer kinds, interaction types, phrasing bans, variation minimums).
+  - Inject selected concept contract into the `generateWithLLM` prompt before OpenAI call.
+  - Require question-family rotation across repeated attempts (diagram labeling/statement validation/scenario-based/etc.).
 
 **Files touched:**
 - `App/AppConfig.swift`
@@ -281,6 +285,7 @@
 3. Validate `expected=BC` and AI `detected=CB` is graded as correct after canonical normalization.
 4. Force malformed v2 payload (`response_contract` mismatch) and confirm deterministic validator rejection before render.
 5. Confirm app still operates in highlight mode only (M3 scope), with schema v2 accepted end-to-end.
+6. For the same concept+difficulty over multiple attempts, verify prompt logs/specs show varied question family and no prohibited generic phrasing.
 
 **Acceptance criteria:**
 - Dynamic question generation path is active by default in app runtime.
@@ -473,13 +478,11 @@
   4. Trigger rating flow and verify client + server logs include `/api/triangles/rate` request and response summaries.
   5. Intentionally cause malformed payload in local testing and verify validation/error logs clearly identify failure stage and reasons.
 
-**Implementation notes (2026-02-26, M3 learner-context novelty gating):**
+**Implementation notes (2026-02-26, concept-to-interaction policy mapping for M3 generation):**
 - Files touched:
-  - `Features/Canvas/TriangleAPI.swift`
-  - `backend/app/api/triangles/generate/route.ts`
-  - `backend/app/lib/m3.ts`
+  - `Features/Canvas/ValidatedLLMQuestionProvider.swift`
+  - `SmartTutorTests/InteractionPolicyTests.swift` (new)
 - Manual test steps:
-  1. Trigger multiple `/api/triangles/generate` calls and verify request payload includes `learner_context.recent_concept_ids`, `recent_prompt_hashes`, `recent_interaction_types`, and `recent_expected_answers`.
-  2. Submit a generated question request with a `recent_prompt_hashes` entry matching the new prompt template hash and verify API validation returns `422` with `novelty_violation`.
-  3. Submit a generated question request where `recent_expected_answers` repeats the same answer target at/above the configured limit and verify API validation returns `422` with `novelty_violation`.
-  4. Submit a generate request with mixed allowed interaction types and a learner context that already used one type; verify LLM prompt logs prioritize unseen interaction types first.
+  1. Run `xcodebuild test -scheme SmartTutor -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:SmartTutorTests/InteractionPolicyTests` and verify policy mapping tests pass.
+  2. Trigger question generation for a basics concept and inspect logs/request payload to confirm `allowed_interaction_types` includes `highlight` + `multiple_choice`.
+  3. Trigger question generation for a Pythagoras concept and inspect logs/request payload to confirm `numeric_input` is included (with `highlight` only for relevant concepts).
