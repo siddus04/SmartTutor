@@ -47,6 +47,55 @@ final class M3ValidationTests: XCTestCase {
         XCTAssertThrowsError(try QuestionSpecValidator.validate(question: spec, conceptId: spec.conceptId, allowedInteractionTypes: ["numeric_input"]))
     }
 
+
+    func testQuestionSpecValidatorRejectsConceptMismatch() throws {
+        var spec = makeValidQuestionSpec()
+        spec = QuestionSpec(
+            schemaVersion: spec.schemaVersion,
+            questionId: spec.questionId,
+            conceptId: spec.conceptId,
+            grade: spec.grade,
+            interactionType: spec.interactionType,
+            difficultyMetadata: spec.difficultyMetadata,
+            diagramSpec: spec.diagramSpec,
+            prompt: "Tap the longest side in this triangle.",
+            responseContract: spec.responseContract,
+            hint: "The longest side is opposite the biggest angle.",
+            explanation: "Use side-length reasoning to identify the longest side.",
+            realWorldConnection: spec.realWorldConnection
+        )
+
+        XCTAssertThrowsError(try QuestionSpecValidator.validate(question: spec, conceptId: spec.conceptId, allowedInteractionTypes: ["highlight"])) { error in
+            guard case ValidationError.conceptMismatch = error else {
+                return XCTFail("Expected conceptMismatch, got \(error)")
+            }
+        }
+    }
+
+    func testQuestionSpecValidatorRejectsGenericRepetition() throws {
+        var spec = makeValidQuestionSpec()
+        spec = QuestionSpec(
+            schemaVersion: spec.schemaVersion,
+            questionId: spec.questionId,
+            conceptId: spec.conceptId,
+            grade: spec.grade,
+            interactionType: spec.interactionType,
+            difficultyMetadata: spec.difficultyMetadata,
+            diagramSpec: spec.diagramSpec,
+            prompt: "Pick AB.",
+            responseContract: spec.responseContract,
+            hint: "Pick AB.",
+            explanation: "Pick AB.",
+            realWorldConnection: spec.realWorldConnection
+        )
+
+        XCTAssertThrowsError(try QuestionSpecValidator.validate(question: spec, conceptId: spec.conceptId, allowedInteractionTypes: ["highlight"])) { error in
+            guard case ValidationError.genericRepetition = error else {
+                return XCTFail("Expected genericRepetition, got \(error)")
+            }
+        }
+    }
+
     func testDifficultyRatingValidatorAcceptsRange() throws {
         let rating = DifficultyRating(
             schemaVersion: "m3.difficulty_rating.v1",

@@ -67,6 +67,10 @@ export async function POST(request: Request) {
 
     return jsonResponse({ question_spec: questionSpec }, 200);
   } catch (error: unknown) {
+    if (error instanceof InvalidQuestionSpecError) {
+      console.log("[API][Generate][SemanticValidationFailed]", JSON.stringify({ reasons: error.reasons }));
+      return jsonResponse({ error: "invalid_question_spec", reasons: error.reasons }, 422);
+    }
     console.error("[API][Generate][Error]", error);
     return jsonResponse({ error: "generation_failed" }, 500);
   }
