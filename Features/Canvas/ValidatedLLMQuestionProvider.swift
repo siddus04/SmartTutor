@@ -208,9 +208,17 @@ enum QuestionSpecValidator {
             requiredSignalGroups: [["opposite"], ["adjacent"]],
             forbiddenSignals: ["sin", "cos", "tan"]
         ),
+        "tri.reasoning.compare_side_lengths": ConceptSemanticRule(
+            requiredSignalGroups: [["compare", "order", "longer", "shorter"], ["side", "length"]],
+            forbiddenSignals: ["sin", "cos", "tan"]
+        ),
         "tri.reasoning.hypotenuse_longest": ConceptSemanticRule(
             requiredSignalGroups: [["hypotenuse"], ["longest"]],
             forbiddenSignals: ["a2+b2", "a²+b²", "pythag"]
+        ),
+        "tri.reasoning.informal_side_relationships": ConceptSemanticRule(
+            requiredSignalGroups: [["side relationship", "statement", "always", "sometimes", "never"]],
+            forbiddenSignals: ["formal proof", "sin", "cos", "tan"]
         ),
         "tri.pyth.check_if_right_triangle": ConceptSemanticRule(
             requiredSignalGroups: [["right triangle", "right-angle triangle"], ["a2+b2", "a²+b²", "pythag"]],
@@ -222,6 +230,26 @@ enum QuestionSpecValidator {
         ),
         "tri.pyth.solve_missing_side": ConceptSemanticRule(
             requiredSignalGroups: [["missing side", "unknown side", "find side", "solve"], ["a2+b2", "a²+b²", "pythag"]],
+            forbiddenSignals: ["sin", "cos", "tan"]
+        ),
+        "tri.pyth.square_area_intuition": ConceptSemanticRule(
+            requiredSignalGroups: [["square", "area"], ["a2+b2", "a²+b²", "c2", "c²"]],
+            forbiddenSignals: ["sin", "cos", "tan"]
+        ),
+        "tri.pyth.square_numbers_refresher": ConceptSemanticRule(
+            requiredSignalGroups: [["square number", "squared", "perfect square"]],
+            forbiddenSignals: ["sin", "cos", "tan"]
+        ),
+        "tri.app.mixed_mastery_test": ConceptSemanticRule(
+            requiredSignalGroups: [["mixed", "review", "mastery"], ["triangle", "right triangle"]],
+            forbiddenSignals: ["sin", "cos", "tan"]
+        ),
+        "tri.app.real_life_modeling": ConceptSemanticRule(
+            requiredSignalGroups: [["real-life", "model", "ramp", "ladder", "roof"]],
+            forbiddenSignals: ["sin", "cos", "tan"]
+        ),
+        "tri.app.word_problems": ConceptSemanticRule(
+            requiredSignalGroups: [["word problem", "story", "situation"], ["triangle", "right triangle"]],
             forbiddenSignals: ["sin", "cos", "tan"]
         )
     ]

@@ -16,7 +16,9 @@ struct DifficultyTarget {
         case .assess:
             direction = .harder
         }
-        return DifficultyTarget(band: clamped...clamped, direction: direction)
+        let lower = max(1, clamped - 1)
+        let upper = min(SessionStorage.grade6DifficultyCeiling, clamped + 1)
+        return DifficultyTarget(band: lower...upper, direction: direction)
     }
 }
 
@@ -149,30 +151,56 @@ private struct LearnerContextPayload: Codable {
     let recentPromptHashes: [String]
     let recentInteractionTypes: [String]
     let recentExpectedAnswers: [String]
+    let recentQuestionFamilies: [String]
 
     enum CodingKeys: String, CodingKey {
         case recentConceptIds = "recent_concept_ids"
         case recentPromptHashes = "recent_prompt_hashes"
         case recentInteractionTypes = "recent_interaction_types"
         case recentExpectedAnswers = "recent_expected_answers"
+        case recentQuestionFamilies = "recent_question_families"
+    }
+
+    init(recentConceptIds: [String], recentPromptHashes: [String], recentInteractionTypes: [String], recentExpectedAnswers: [String], recentQuestionFamilies: [String]) {
+        self.recentConceptIds = recentConceptIds
+        self.recentPromptHashes = recentPromptHashes
+        self.recentInteractionTypes = recentInteractionTypes
+        self.recentExpectedAnswers = recentExpectedAnswers
+        self.recentQuestionFamilies = recentQuestionFamilies
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        recentConceptIds = try c.decodeIfPresent([String].self, forKey: .recentConceptIds) ?? []
+        recentPromptHashes = try c.decodeIfPresent([String].self, forKey: .recentPromptHashes) ?? []
+        recentInteractionTypes = try c.decodeIfPresent([String].self, forKey: .recentInteractionTypes) ?? []
+        recentExpectedAnswers = try c.decodeIfPresent([String].self, forKey: .recentExpectedAnswers) ?? []
+        recentQuestionFamilies = try c.decodeIfPresent([String].self, forKey: .recentQuestionFamilies) ?? []
     }
 }
 
 private actor LearnerContextStore {
     static let shared = LearnerContextStore()
+    private static let storageKey = "smarttutor.learnerContext.v1"
     private let maxHistoryCount = 8
 
     private var recentConceptIds: [String] = []
     private var recentPromptHashes: [String] = []
     private var recentInteractionTypes: [String] = []
     private var recentExpectedAnswers: [String] = []
+    private var recentQuestionFamilies: [String] = []
+
+    init() {
+        restore()
+    }
 
     func snapshot() -> LearnerContextPayload {
         LearnerContextPayload(
             recentConceptIds: recentConceptIds,
             recentPromptHashes: recentPromptHashes,
             recentInteractionTypes: recentInteractionTypes,
-            recentExpectedAnswers: recentExpectedAnswers
+            recentExpectedAnswers: recentExpectedAnswers,
+            recentQuestionFamilies: recentQuestionFamilies
         )
     }
 
@@ -181,6 +209,8 @@ private actor LearnerContextStore {
         append(hashPrompt(questionSpec.prompt), into: &recentPromptHashes)
         append(questionSpec.interactionType, into: &recentInteractionTypes)
         append(normalizedExpectedAnswer(from: questionSpec), into: &recentExpectedAnswers)
+        append((questionSpec.questionFamily ?? fallbackQuestionFamily(for: questionSpec.conceptId, interactionType: questionSpec.interactionType)).lowercased(), into: &recentQuestionFamilies)
+        persist()
     }
 
     private func append(_ value: String, into array: inout [String]) {
@@ -198,6 +228,32 @@ private actor LearnerContextStore {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let digest = SHA256.hash(data: Data(normalized.utf8))
         return digest.compactMap { String(format: "%02x", $0) }.joined().prefix(16).lowercased()
+    }
+
+
+    private func fallbackQuestionFamily(for conceptId: String, interactionType: String) -> String {
+        if conceptId.hasPrefix("tri.basics.") { return interactionType == "multiple_choice" ? "basics_mcq" : "basics_highlight" }
+        if conceptId.hasPrefix("tri.structure.") { return interactionType == "multiple_choice" ? "structure_mcq" : "structure_identify" }
+        if conceptId.hasPrefix("tri.reasoning.") { return interactionType == "numeric_input" ? "reasoning_numeric" : "reasoning_compare" }
+        if conceptId.hasPrefix("tri.pyth.") { return interactionType == "numeric_input" ? "pyth_numeric" : "pyth_relation" }
+        if conceptId.hasPrefix("tri.app.") { return interactionType == "numeric_input" ? "application_numeric" : "application_scenario" }
+        return "generic_\(interactionType)"
+    }
+
+    private func persist() {
+        let payload = snapshot()
+        guard let data = try? JSONEncoder().encode(payload) else { return }
+        UserDefaults.standard.set(data, forKey: Self.storageKey)
+    }
+
+    private func restore() {
+        guard let data = UserDefaults.standard.data(forKey: Self.storageKey),
+              let payload = try? JSONDecoder().decode(LearnerContextPayload.self, from: data) else { return }
+        recentConceptIds = payload.recentConceptIds
+        recentPromptHashes = payload.recentPromptHashes
+        recentInteractionTypes = payload.recentInteractionTypes
+        recentExpectedAnswers = payload.recentExpectedAnswers
+        recentQuestionFamilies = payload.recentQuestionFamilies
     }
 
     private func normalizedExpectedAnswer(from questionSpec: QuestionSpec) -> String {

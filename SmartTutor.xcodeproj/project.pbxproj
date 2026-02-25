@@ -24,6 +24,7 @@
 		38E5B2A92F4D81AB004B0B2E /* CurriculumGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2A62F4D81AB004B0B2E /* CurriculumGraph.swift */; };
 		38E5B2AA2F4D81AB004B0B2E /* MasteryEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2A72F4D81AB004B0B2E /* MasteryEngine.swift */; };
 		38E5B2AB2F4D81AB004B0B2E /* StubQuestionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2A82F4D81AB004B0B2E /* StubQuestionProvider.swift */; };
+		38E5B2AF2F4D81AB004B0B2E /* ValidatedLLMQuestionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E5B2AE2F4D81AB004B0B2E /* ValidatedLLMQuestionProvider.swift */; };
 		38E5B2AD2F4D8804004B0B2E /* PRD.md in Resources */ = {isa = PBXBuildFile; fileRef = 38E5B2AC2F4D8804004B0B2E /* PRD.md */; };
 		38F100012F50000100AA0001 /* LearnerSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F100112F50000100AA0001 /* LearnerSession.swift */; };
 		38F100022F50000100AA0001 /* LearnerSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F100122F50000100AA0001 /* LearnerSessionStore.swift */; };
@@ -70,6 +71,7 @@
 		38E5B2A62F4D81AB004B0B2E /* CurriculumGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurriculumGraph.swift; sourceTree = "<group>"; };
 		38E5B2A72F4D81AB004B0B2E /* MasteryEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasteryEngine.swift; sourceTree = "<group>"; };
 		38E5B2A82F4D81AB004B0B2E /* StubQuestionProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StubQuestionProvider.swift; sourceTree = "<group>"; };
+		38E5B2AE2F4D81AB004B0B2E /* ValidatedLLMQuestionProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ValidatedLLMQuestionProvider.swift; sourceTree = "<group>"; };
 		38E5B2AC2F4D8804004B0B2E /* PRD.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PRD.md; sourceTree = "<group>"; };
 		38F100112F50000100AA0001 /* LearnerSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearnerSession.swift; sourceTree = "<group>"; };
 		38F100122F50000100AA0001 /* LearnerSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearnerSessionStore.swift; sourceTree = "<group>"; };
@@ -183,6 +185,7 @@
 				38E5B2A62F4D81AB004B0B2E /* CurriculumGraph.swift */,
 				38E5B2A72F4D81AB004B0B2E /* MasteryEngine.swift */,
 				38E5B2A82F4D81AB004B0B2E /* StubQuestionProvider.swift */,
+				38E5B2AE2F4D81AB004B0B2E /* ValidatedLLMQuestionProvider.swift */,
 				38E5B2922F49D067004B0B2E /* VisionPipeline.swift */,
 				38E5B28C2F48ACC0004B0B2E /* TriangleAIChecker.swift */,
 				38E5B28D2F48ACC0004B0B2E /* TriangleSnapshotter.swift */,
@@ -415,6 +418,7 @@
 				38E5B2A92F4D81AB004B0B2E /* CurriculumGraph.swift in Sources */,
 				38E5B2AA2F4D81AB004B0B2E /* MasteryEngine.swift in Sources */,
 				38E5B2AB2F4D81AB004B0B2E /* StubQuestionProvider.swift in Sources */,
+				38E5B2AF2F4D81AB004B0B2E /* ValidatedLLMQuestionProvider.swift in Sources */,
 				38E5B28F2F48ACC0004B0B2E /* TriangleAIChecker.swift in Sources */,
 				3856AD162F2DD48400CC610B /* SmartTutorApp.swift in Sources */,
 				38E5B2892F4899ED004B0B2E /* TriangleDiagramView.swift in Sources */,
