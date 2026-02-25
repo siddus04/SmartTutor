@@ -141,13 +141,8 @@ struct ValidatedLLMQuestionProvider: TriangleQuestionProviding {
 
 enum InteractionPolicy {
     static func allowedTypes(for conceptId: String) -> [String] {
-        if conceptId.contains("pyth") {
-            return ["numeric_input", "multiple_choice", "highlight"]
-        }
-        if conceptId.contains("app") {
-            return ["multiple_choice", "numeric_input", "highlight"]
-        }
-        return ["highlight", "multiple_choice"]
+        _ = conceptId
+        return ["highlight"]
     }
 }
 
@@ -174,10 +169,13 @@ enum TriangleAdapter {
                     vertexLabels: labels,
                     rightAngleAt: spec.diagramSpec.rightAngleAt
                 ),
-                answer: TriangleAnswer(value: spec.answer.value),
+                answer: TriangleAnswer(value: spec.responseContract.answer.value),
                 conceptId: spec.conceptId,
                 difficulty: ratedDifficulty,
-                intent: intent.rawValue
+                intent: intent.rawValue,
+                interactionType: spec.interactionType,
+                responseMode: spec.responseContract.mode,
+                promptText: spec.prompt
             )
         )
     }
@@ -185,7 +183,7 @@ enum TriangleAdapter {
 
 enum QuestionSpecValidator {
     static func validate(question: QuestionSpec, conceptId: String, allowedInteractionTypes: [String]) throws {
-        guard question.schemaVersion == "m3.question_spec.v1" else { throw ValidationError.schema }
+        guard question.schemaVersion == "m3.question_spec.v2" else { throw ValidationError.schema }
         guard question.grade == 6 else { throw ValidationError.gradeCap }
         guard question.conceptId == conceptId else { throw ValidationError.ontology }
         guard CurriculumGraph.trianglesGrade6.concepts.contains(where: { $0.id == conceptId }) else { throw ValidationError.ontology }
@@ -209,14 +207,18 @@ enum QuestionSpecValidator {
 
         guard triangleArea(from: question.diagramSpec.pointsNormalized) > 0.001 else { throw ValidationError.renderability }
 
+        guard question.responseContract.mode == question.interactionType else { throw ValidationError.answerMismatch }
+
         switch question.interactionType {
         case "highlight":
-            guard question.answer.kind == "point_set" || question.answer.kind == "segment" else { throw ValidationError.answerMismatch }
+            guard question.responseContract.answer.kind == "point_set" || question.responseContract.answer.kind == "segment" else { throw ValidationError.answerMismatch }
         case "multiple_choice":
-            guard question.answer.kind == "option_id" else { throw ValidationError.answerMismatch }
+            guard question.responseContract.answer.kind == "option_id" else { throw ValidationError.answerMismatch }
+            guard let options = question.responseContract.options, options.count >= 2 else { throw ValidationError.answerMismatch }
+            guard options.contains(where: { $0.id == question.responseContract.answer.value }) else { throw ValidationError.answerMismatch }
         case "numeric_input":
-            guard question.answer.kind == "number" else { throw ValidationError.answerMismatch }
-            guard Double(question.answer.value) != nil else { throw ValidationError.answerMismatch }
+            guard question.responseContract.answer.kind == "number" else { throw ValidationError.answerMismatch }
+            guard Double(question.responseContract.answer.value) != nil else { throw ValidationError.answerMismatch }
         default:
             throw ValidationError.interaction
         }

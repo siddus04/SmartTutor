@@ -245,6 +245,57 @@
 
 ---
 
+### M3.1 — Dynamic Contract + AI-First Grading Corrections (M3 scope hardening)
+**Status:** In progress
+
+**Goal:** Fix M3 experience regressions while staying within M3 scope: dynamic generation verification, concept-aligned feedback, canonical grading, and schema clean-cut to v2 contracts.
+
+**Build:**
+- M3.1a:
+  - Switch default runtime to validated LLM question provider (stub disabled by default).
+  - Remove hardcoded hypotenuse context in AI check request path; pass dynamic concept/prompt/interaction metadata.
+  - Make fallback feedback language concept-agnostic.
+- M3.1b:
+  - Canonical segment normalization (`AB == BA`, `BC == CB`, `CA == AC`) before correctness checks.
+  - Keep AI-first grading decision; deterministic local signal remains telemetry/debug only.
+- M3.1c:
+  - Clean-cut schema migration to `m3.question_spec.v2` with `response_contract`.
+  - Add mode-specific validation rails for highlight/multiple_choice/numeric_input.
+  - Keep current canvas runtime constrained to highlight interaction until M4 UI modes are implemented.
+
+**Files touched:**
+- `App/AppConfig.swift`
+- `Features/Canvas/TriangleModels.swift`
+- `Features/Canvas/ValidatedLLMQuestionProvider.swift`
+- `Features/Canvas/CanvasSandboxView.swift`
+- `Features/Canvas/TriangleAIChecker.swift`
+- `backend/app/lib/m3.ts`
+- `backend/app/api/triangles/check/route.ts`
+- `SmartTutorTests/M3ValidationTests.swift`
+- `backend/README.md`
+- `PLANS.md`
+
+**Manual test steps:**
+1. Launch app with API configured; generate multiple questions and verify validated LLM pipeline is active by default.
+2. Check answer on a non-hypotenuse prompt and verify tutor feedback aligns with prompt context (no fixed hypotenuse language).
+3. Validate `expected=BC` and AI `detected=CB` is graded as correct after canonical normalization.
+4. Force malformed v2 payload (`response_contract` mismatch) and confirm deterministic validator rejection before render.
+5. Confirm app still operates in highlight mode only (M3 scope), with schema v2 accepted end-to-end.
+
+**Acceptance criteria:**
+- Dynamic question generation path is active by default in app runtime.
+- AI feedback is context-aware and no longer hardcoded to hypotenuse.
+- Canonical segment labels prevent false negatives (`CB` vs `BC`).
+- Schema v2 (`response_contract`) is enforced in app and backend validators.
+- M3 scope preserved; deferred UI modes are captured as TODO.
+
+**TODO (deferred to M4):**
+- Implement first-class UI capture/rendering for `multiple_choice` and `numeric_input` in canvas tutor flow.
+- Add deterministic grading paths for non-highlight interactions in-app.
+- Add equation-input interaction mode once M4 renderer/input layer is live.
+
+---
+
 ### M5 — Grading Arbitration + Tutor Feedback Loop
 **Goal:** Provide robust grading outcomes with confidence/ambiguity control and age-appropriate feedback.
 

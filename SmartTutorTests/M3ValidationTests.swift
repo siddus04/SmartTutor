@@ -13,7 +13,7 @@ final class M3ValidationTests: XCTestCase {
             difficultyMetadata: spec.difficultyMetadata,
             diagramSpec: spec.diagramSpec,
             prompt: spec.prompt,
-            answer: spec.answer,
+            responseContract: spec.responseContract,
             hint: spec.hint,
             explanation: spec.explanation,
             realWorldConnection: spec.realWorldConnection
@@ -33,7 +33,12 @@ final class M3ValidationTests: XCTestCase {
             difficultyMetadata: spec.difficultyMetadata,
             diagramSpec: spec.diagramSpec,
             prompt: spec.prompt,
-            answer: SpecAnswer(kind: "option_id", value: "A"),
+            responseContract: ResponseContract(
+                mode: "numeric_input",
+                answer: SpecAnswer(kind: "option_id", value: "A"),
+                options: nil,
+                numericRule: nil
+            ),
             hint: spec.hint,
             explanation: spec.explanation,
             realWorldConnection: spec.realWorldConnection
@@ -62,7 +67,7 @@ final class M3ValidationTests: XCTestCase {
 
     private func makeValidQuestionSpec() -> QuestionSpec {
         QuestionSpec(
-            schemaVersion: "m3.question_spec.v1",
+            schemaVersion: "m3.question_spec.v2",
             questionId: "q1",
             conceptId: "tri.structure.hypotenuse",
             grade: 6,
@@ -78,7 +83,12 @@ final class M3ValidationTests: XCTestCase {
                 rightAngleAt: "C"
             ),
             prompt: "Circle the hypotenuse.",
-            answer: SpecAnswer(kind: "segment", value: "AB"),
+            responseContract: ResponseContract(
+                mode: "highlight",
+                answer: SpecAnswer(kind: "segment", value: "AB"),
+                options: nil,
+                numericRule: nil
+            ),
             hint: "Opposite the right angle.",
             explanation: "The hypotenuse is across from the right angle.",
             realWorldConnection: "Think of a ladder on a wall."

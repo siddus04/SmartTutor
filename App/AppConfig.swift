@@ -19,7 +19,7 @@ enum AppConfig {
     static let masteryRemediationIncorrectThreshold = 1
 
     // M2 execution mode
-    static let useStubQuestionProvider = true
+    static let useStubQuestionProvider = false
 }
 
 enum UIFlags {

@@ -29,8 +29,11 @@ http://localhost:3000/api/triangles/check
 curl -X POST http://localhost:3000/api/triangles/check \
   -H "Content-Type: application/json" \
   -d '{
-    "concept": "C1",
-    "task": "circle_hypotenuse",
+    "concept_id": "tri.structure.hypotenuse",
+    "prompt_text": "Identify the side opposite the right angle.",
+    "interaction_type": "highlight",
+    "response_mode": "highlight",
+    "expected_answer_value": "AB",
     "right_angle_at": "C",
     "combined_png_base64": "<BASE64_PNG>"
   }'

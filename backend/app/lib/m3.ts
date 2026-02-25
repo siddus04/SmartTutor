@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 
 export type QuestionSpec = {
-  schema_version: "m3.question_spec.v1";
+  schema_version: "m3.question_spec.v2";
   question_id: string;
   concept_id: string;
   grade: number;
@@ -13,7 +13,12 @@ export type QuestionSpec = {
     right_angle_at?: "A" | "B" | "C" | null;
   };
   prompt: string;
-  answer: { kind: string; value: string };
+  response_contract: {
+    mode: "highlight" | "multiple_choice" | "numeric_input";
+    answer: { kind: string; value: string };
+    options?: Array<{ id: string; text: string }>;
+    numeric_rule?: { tolerance?: number };
+  };
   hint: string;
   explanation: string;
   real_world_connection: string;
@@ -44,7 +49,7 @@ const ontology = new Set([
 
 export function validateQuestionSpec(spec: QuestionSpec, allowedInteractionTypes: string[]): string[] {
   const errors: string[] = [];
-  if (spec.schema_version !== "m3.question_spec.v1") errors.push("schema");
+  if (spec.schema_version !== "m3.question_spec.v2") errors.push("schema");
   if (spec.grade !== 6) errors.push("grade_cap");
   if (!ontology.has(spec.concept_id)) errors.push("ontology");
   if (!allowedInteractionTypes.includes(spec.interaction_type)) errors.push("interaction_not_allowed");
@@ -59,9 +64,14 @@ export function validateQuestionSpec(spec: QuestionSpec, allowedInteractionTypes
   if (spec.diagram_spec.points_normalized.some((p) => p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1)) errors.push("diagram_bounds");
   if (triangleArea(spec) <= 0.001) errors.push("diagram_degenerate");
 
-  if (spec.interaction_type === "multiple_choice" && spec.answer.kind !== "option_id") errors.push("answer_mismatch");
-  if (spec.interaction_type === "numeric_input" && (spec.answer.kind !== "number" || Number.isNaN(Number(spec.answer.value)))) errors.push("answer_mismatch");
-  if (spec.interaction_type === "highlight" && !(spec.answer.kind === "point_set" || spec.answer.kind === "segment")) errors.push("answer_mismatch");
+  if (spec.response_contract.mode !== spec.interaction_type) errors.push("answer_mismatch");
+  if (spec.interaction_type === "multiple_choice") {
+    if (spec.response_contract.answer.kind !== "option_id") errors.push("answer_mismatch");
+    if (!spec.response_contract.options || spec.response_contract.options.length < 2) errors.push("answer_mismatch");
+    if (!spec.response_contract.options?.some((opt) => opt.id === spec.response_contract.answer.value)) errors.push("answer_mismatch");
+  }
+  if (spec.interaction_type === "numeric_input" && (spec.response_contract.answer.kind !== "number" || Number.isNaN(Number(spec.response_contract.answer.value)))) errors.push("answer_mismatch");
+  if (spec.interaction_type === "highlight" && !(spec.response_contract.answer.kind === "point_set" || spec.response_contract.answer.kind === "segment")) errors.push("answer_mismatch");
   return errors;
 }
 
@@ -83,7 +93,7 @@ export async function generateWithLLM(input: {
   const fallback = makeFallbackSpec(input.conceptId, input.allowedInteractionTypes[0] ?? "highlight", input.targetBand?.min ?? 2);
   if (!process.env.OPENAI_API_KEY) return fallback;
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const prompt = `You are SmartTutor's Grade-6 K12 geometry tutor.\nReturn strict JSON only.\nTopic scope: Triangles up to Pythagoras.\nNo trig, no formal proofs, no surds/irrational roots.\nUse concept_id=${input.conceptId}, grade=${input.grade}.\nAllowed interaction types: ${input.allowedInteractionTypes.join(",")}.\nTarget band: ${JSON.stringify(input.targetBand ?? null)}. Target direction: ${input.targetDirection ?? "null"}.\nSchema keys required: schema_version,question_id,concept_id,grade,interaction_type,difficulty_metadata,diagram_spec,prompt,answer,hint,explanation,real_world_connection.`;
+  const prompt = `You are SmartTutor's Grade-6 K12 geometry tutor.\nReturn strict JSON only.\nTopic scope: Triangles up to Pythagoras.\nNo trig, no formal proofs, no surds/irrational roots.\nUse concept_id=${input.conceptId}, grade=${input.grade}.\nAllowed interaction types: ${input.allowedInteractionTypes.join(",")}.\nTarget band: ${JSON.stringify(input.targetBand ?? null)}. Target direction: ${input.targetDirection ?? "null"}.\nSchema keys required: schema_version,question_id,concept_id,grade,interaction_type,difficulty_metadata,diagram_spec,prompt,response_contract,hint,explanation,real_world_connection.`;
 
   try {
     const response = await client.responses.create({
@@ -127,9 +137,9 @@ function heuristicRating(spec: QuestionSpec): DifficultyRating {
     contains_surd_or_irrational_root: false,
     out_of_ontology: !ontology.has(spec.concept_id),
     non_renderable_diagram: triangleArea(spec) <= 0.001,
-    interaction_answer_mismatch: (spec.interaction_type === "multiple_choice" && spec.answer.kind !== "option_id") ||
-      (spec.interaction_type === "numeric_input" && spec.answer.kind !== "number") ||
-      (spec.interaction_type === "highlight" && !(spec.answer.kind === "point_set" || spec.answer.kind === "segment"))
+    interaction_answer_mismatch: (spec.interaction_type === "multiple_choice" && spec.response_contract.answer.kind !== "option_id") ||
+      (spec.interaction_type === "numeric_input" && spec.response_contract.answer.kind !== "number") ||
+      (spec.interaction_type === "highlight" && !(spec.response_contract.answer.kind === "point_set" || spec.response_contract.answer.kind === "segment"))
   };
 
   return {
@@ -158,14 +168,41 @@ function triangleArea(spec: QuestionSpec): number {
 }
 
 function makeFallbackSpec(conceptId: string, interactionType: string, difficulty: number): QuestionSpec {
-  const answerKind = interactionType === "multiple_choice" ? "option_id" : interactionType === "numeric_input" ? "number" : "segment";
-  const answerValue = interactionType === "numeric_input" ? "5" : "AB";
+  const safeType: QuestionSpec["interaction_type"] = ["highlight", "multiple_choice", "numeric_input"].includes(interactionType)
+    ? interactionType as QuestionSpec["interaction_type"]
+    : "highlight";
+  const isPyth = conceptId.includes("tri.pyth");
+  const isBasics = conceptId.includes("tri.basics");
+
+  const answerKind = safeType === "multiple_choice" ? "option_id" : safeType === "numeric_input" ? "number" : "segment";
+  const answerValue = safeType === "numeric_input" ? (isPyth ? "13" : "5") : "AB";
+  const options = safeType === "multiple_choice"
+    ? [
+      { id: "opt_ab", text: "AB" },
+      { id: "opt_bc", text: "BC" },
+      { id: "opt_ca", text: "CA" }
+    ]
+    : undefined;
+
+  const prompt = isPyth
+    ? (safeType === "numeric_input" ? "A right triangle has legs 5 and 12. Enter the hypotenuse length." : "Which statement matches a 5-12-13 right triangle?")
+    : isBasics
+      ? "Identify the side opposite the marked right angle."
+      : "Identify the segment that matches the prompt for this triangle concept.";
+  const hint = isPyth ? "Use a² + b² = c²." : "Look at the right-angle marker first.";
+  const explanation = isPyth
+    ? "For a right triangle, the square of the hypotenuse equals the sum of squares of the legs."
+    : "Use labels and structure to reason about which side satisfies the condition in the prompt.";
+  const realWorld = isPyth
+    ? "Ramps and ladders often form right triangles where this relation helps estimate length."
+    : "Triangle side identification helps in maps, roof trusses, and basic engineering sketches.";
+
   return {
-    schema_version: "m3.question_spec.v1",
+    schema_version: "m3.question_spec.v2",
     question_id: `fallback.${conceptId}.${Date.now()}`,
     concept_id: conceptId,
     grade: 6,
-    interaction_type: (interactionType as QuestionSpec["interaction_type"]) || "highlight",
+    interaction_type: safeType,
     difficulty_metadata: { generator_self_rating: Math.max(1, Math.min(4, difficulty)) },
     diagram_spec: {
       type: "triangle",
@@ -176,10 +213,18 @@ function makeFallbackSpec(conceptId: string, interactionType: string, difficulty
       ],
       right_angle_at: "C"
     },
-    prompt: "Find the hypotenuse of this right triangle.",
-    answer: { kind: answerKind, value: answerValue },
-    hint: "The hypotenuse is opposite the right angle.",
-    explanation: "In a right triangle, the hypotenuse is the side across from the right angle.",
-    real_world_connection: "A ladder leaning on a wall forms a right triangle."
+    prompt,
+    response_contract: {
+      mode: safeType,
+      answer: {
+        kind: answerKind,
+        value: safeType === "multiple_choice" ? "opt_ab" : answerValue
+      },
+      options,
+      numeric_rule: safeType === "numeric_input" ? { tolerance: 0 } : undefined
+    },
+    hint,
+    explanation,
+    real_world_connection: realWorld
   };
 }
