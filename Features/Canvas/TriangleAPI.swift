@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 protocol TriangleAPIClient {
     func generateQuestion(conceptId: String, grade: Int, target: DifficultyTarget, allowedInteractionTypes: [String]) async throws -> GeneratedQuestionEnvelope
@@ -29,13 +30,14 @@ struct LiveTriangleAPIClient: TriangleAPIClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
+        let learnerContext = await LearnerContextStore.shared.snapshot()
         let payload = GenerateQuestionRequest(
             conceptId: conceptId,
             grade: grade,
             targetBand: target.band.map { DifficultyBand(min: $0.lowerBound, max: $0.upperBound) },
             targetDirection: target.direction?.rawValue,
             allowedInteractionTypes: allowedInteractionTypes,
-            learnerContext: [:]
+            learnerContext: learnerContext
         )
         let requestData = try JSONEncoder().encode(payload)
         request.httpBody = requestData
@@ -45,7 +47,9 @@ struct LiveTriangleAPIClient: TriangleAPIClient {
         logHTTP("[TriangleAPI][Generate]", response: response)
         logJSON("[TriangleAPI][Generate][Response]", data: data)
         try ensureSuccess(response: response)
-        return try JSONDecoder().decode(GeneratedQuestionEnvelope.self, from: data)
+        let envelope = try JSONDecoder().decode(GeneratedQuestionEnvelope.self, from: data)
+        await LearnerContextStore.shared.record(questionSpec: envelope.questionSpec)
+        return envelope
     }
 
     func rateDifficulty(questionSpec: QuestionSpec, grade: Int) async throws -> DifficultyRating {
@@ -103,7 +107,7 @@ private struct GenerateQuestionRequest: Codable {
     let targetBand: DifficultyBand?
     let targetDirection: String?
     let allowedInteractionTypes: [String]
-    let learnerContext: [String: String]
+    let learnerContext: LearnerContextPayload
 
     enum CodingKeys: String, CodingKey {
         case conceptId = "concept_id"
@@ -112,6 +116,73 @@ private struct GenerateQuestionRequest: Codable {
         case targetDirection = "target_direction"
         case allowedInteractionTypes = "allowed_interaction_types"
         case learnerContext = "learner_context"
+    }
+}
+
+private struct LearnerContextPayload: Codable {
+    let recentConceptIds: [String]
+    let recentPromptHashes: [String]
+    let recentInteractionTypes: [String]
+    let recentExpectedAnswers: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case recentConceptIds = "recent_concept_ids"
+        case recentPromptHashes = "recent_prompt_hashes"
+        case recentInteractionTypes = "recent_interaction_types"
+        case recentExpectedAnswers = "recent_expected_answers"
+    }
+}
+
+private actor LearnerContextStore {
+    static let shared = LearnerContextStore()
+    private let maxHistoryCount = 8
+
+    private var recentConceptIds: [String] = []
+    private var recentPromptHashes: [String] = []
+    private var recentInteractionTypes: [String] = []
+    private var recentExpectedAnswers: [String] = []
+
+    func snapshot() -> LearnerContextPayload {
+        LearnerContextPayload(
+            recentConceptIds: recentConceptIds,
+            recentPromptHashes: recentPromptHashes,
+            recentInteractionTypes: recentInteractionTypes,
+            recentExpectedAnswers: recentExpectedAnswers
+        )
+    }
+
+    func record(questionSpec: QuestionSpec) {
+        append(questionSpec.conceptId, into: &recentConceptIds)
+        append(hashPrompt(questionSpec.prompt), into: &recentPromptHashes)
+        append(questionSpec.interactionType, into: &recentInteractionTypes)
+        append(normalizedExpectedAnswer(from: questionSpec), into: &recentExpectedAnswers)
+    }
+
+    private func append(_ value: String, into array: inout [String]) {
+        guard !value.isEmpty else { return }
+        array.append(value)
+        if array.count > maxHistoryCount {
+            array.removeFirst(array.count - maxHistoryCount)
+        }
+    }
+
+    private func hashPrompt(_ prompt: String) -> String {
+        let normalized = prompt
+            .lowercased()
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let digest = SHA256.hash(data: Data(normalized.utf8))
+        return digest.compactMap { String(format: "%02x", $0) }.joined().prefix(16).lowercased()
+    }
+
+    private func normalizedExpectedAnswer(from questionSpec: QuestionSpec) -> String {
+        let normalizedKind = questionSpec.responseContract.answer.kind
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedValue = questionSpec.responseContract.answer.value
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\(normalizedKind):\(normalizedValue)"
     }
 }
 

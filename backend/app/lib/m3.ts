@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { createHash } from "crypto";
 
 export type QuestionSpec = {
   schema_version: "m3.question_spec.v2";
@@ -37,6 +38,23 @@ export type DifficultyRating = {
     non_renderable_diagram: boolean;
     interaction_answer_mismatch: boolean;
   };
+};
+
+export type LearnerContext = {
+  recentConceptIds: string[];
+  recentPromptHashes: string[];
+  recentInteractionTypes: string[];
+  recentExpectedAnswers: string[];
+};
+
+export type NoveltyConfig = {
+  promptHashWindow: number;
+  expectedAnswerRepeatLimit: number;
+};
+
+const DEFAULT_NOVELTY_CONFIG: NoveltyConfig = {
+  promptHashWindow: 3,
+  expectedAnswerRepeatLimit: 2
 };
 
 const ontology = new Set([
@@ -302,6 +320,49 @@ export function validateQuestionSpec(spec: QuestionSpec, allowedInteractionTypes
   return errors;
 }
 
+export function normalizeLearnerContext(raw: unknown): LearnerContext {
+  if (!raw || typeof raw !== "object") {
+    return {
+      recentConceptIds: [],
+      recentPromptHashes: [],
+      recentInteractionTypes: [],
+      recentExpectedAnswers: []
+    };
+  }
+
+  const payload = raw as Record<string, unknown>;
+  return {
+    recentConceptIds: readStringArray(payload.recent_concept_ids),
+    recentPromptHashes: readStringArray(payload.recent_prompt_hashes),
+    recentInteractionTypes: readStringArray(payload.recent_interaction_types),
+    recentExpectedAnswers: readStringArray(payload.recent_expected_answers)
+  };
+}
+
+export function validateNovelty(spec: QuestionSpec, learnerContext: LearnerContext, config: NoveltyConfig = DEFAULT_NOVELTY_CONFIG): string[] {
+  const violations: string[] = [];
+  const promptHash = promptTemplateHash(spec.prompt);
+  const expectedTarget = expectedAnswerKey(spec);
+
+  if (learnerContext.recentPromptHashes.slice(-config.promptHashWindow).includes(promptHash)) {
+    violations.push("novelty_violation");
+  }
+
+  const repeats = learnerContext.recentExpectedAnswers.filter((value) => value === expectedTarget).length;
+  if (repeats >= config.expectedAnswerRepeatLimit) {
+    violations.push("novelty_violation");
+  }
+
+  return [...new Set(violations)];
+}
+
+export function prioritizeInteractionTypes(allowedInteractionTypes: string[], learnerContext: LearnerContext): string[] {
+  const unseen = allowedInteractionTypes.filter((type) => !learnerContext.recentInteractionTypes.includes(type));
+  if (unseen.length === 0) return allowedInteractionTypes;
+  const seen = allowedInteractionTypes.filter((type) => learnerContext.recentInteractionTypes.includes(type));
+  return [...unseen, ...seen];
+}
+
 export function validateDifficultyRating(rating: DifficultyRating): string[] {
   const errors: string[] = [];
   if (rating.schema_version !== "m3.difficulty_rating.v1") errors.push("schema");
@@ -316,8 +377,16 @@ export async function generateWithLLM(input: {
   allowedInteractionTypes: string[];
   targetDirection?: string;
   targetBand?: { min: number; max: number };
+  learnerContext?: LearnerContext;
 }): Promise<QuestionSpec> {
-  const fallback = makeFallbackSpec(input.conceptId, input.allowedInteractionTypes[0] ?? "highlight", input.targetBand?.min ?? 2);
+  const learnerContext = input.learnerContext ?? {
+    recentConceptIds: [],
+    recentPromptHashes: [],
+    recentInteractionTypes: [],
+    recentExpectedAnswers: []
+  };
+  const prioritizedInteractions = prioritizeInteractionTypes(input.allowedInteractionTypes, learnerContext);
+  const fallback = makeFallbackSpec(input.conceptId, prioritizedInteractions[0] ?? "highlight", input.targetBand?.min ?? 2);
   if (!process.env.OPENAI_API_KEY) return fallback;
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const conceptContractText = buildConceptContractText(input);
@@ -334,6 +403,27 @@ export async function generateWithLLM(input: {
   } catch {
     return fallback;
   }
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .slice(-8);
+}
+
+function promptTemplateHash(prompt: string): string {
+  const normalized = prompt
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  return createHash("sha256").update(normalized).digest("hex").slice(0, 16);
+}
+
+function expectedAnswerKey(spec: QuestionSpec): string {
+  return `${spec.response_contract.answer.kind}:${spec.response_contract.answer.value}`.toLowerCase().trim();
 }
 
 export async function rateWithLLM(questionSpec: QuestionSpec, grade: number): Promise<DifficultyRating> {
