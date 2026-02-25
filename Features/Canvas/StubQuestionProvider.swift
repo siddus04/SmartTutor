@@ -7,7 +7,7 @@ protocol TriangleQuestionProviding {
 struct StubQuestionProvider: TriangleQuestionProviding {
     func generateQuestion(conceptId: String, difficulty: Int, intent: LearningIntent) async throws -> TriangleResponse {
         let cappedDifficulty = min(max(difficulty, 1), SessionStorage.grade6DifficultyCeiling)
-        let interactionType = defaultInteractionType(for: conceptId)
+        let interactionType = InteractionPolicy.allowedModes(for: conceptId).first ?? "multiple_choice"
         let template = templateForConcept(conceptId: conceptId, interactionType: interactionType)
 
         return TriangleResponse(
@@ -38,17 +38,6 @@ struct StubQuestionProvider: TriangleQuestionProviding {
                 responseContract: responseContract(for: interactionType, answer: template.answer)
             )
         )
-    }
-
-
-    private func defaultInteractionType(for conceptId: String) -> String {
-        if conceptId.hasPrefix("tri.pyth.") || conceptId.hasPrefix("tri.app.") {
-            return "multiple_choice"
-        }
-        if conceptId.hasPrefix("tri.basics.") || conceptId.hasPrefix("tri.structure.") || conceptId.hasPrefix("tri.reasoning.") {
-            return "highlight"
-        }
-        return "multiple_choice"
     }
 
     private func templateForConcept(conceptId: String, interactionType: String) -> (prompt: String, hint: String, realWorld: String, answer: String) {

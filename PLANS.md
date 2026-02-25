@@ -502,11 +502,3 @@
   3. Answer several questions repeatedly in same concept; verify novelty rejects repeated families and rotates interaction types when possible.
   4. Relaunch app and generate a new question; verify learner context history persists and is sent in request payload.
   5. Run unit tests to confirm difficulty tolerance accepts near-target ratings and prevents avoidable fallback.
-
-**Implementation notes (2026-02-26 — hotfix for StubQuestionProvider compile dependency):**
-- Files touched:
-  - `Features/Canvas/StubQuestionProvider.swift`
-- Manual test steps:
-  1. Build SmartTutor target in Xcode and verify `StubQuestionProvider.swift` compiles without requiring `InteractionPolicy` symbol.
-  2. Set `AppConfig.useStubQuestionProvider = true`, launch app, and verify a stub question loads.
-  3. Confirm multiple-choice stub response contract has unique option IDs (`opt_a`, `opt_b`, `opt_c`, `opt_ab`).
