@@ -262,6 +262,10 @@
   - Clean-cut schema migration to `m3.question_spec.v2` with `response_contract`.
   - Add mode-specific validation rails for highlight/multiple_choice/numeric_input.
   - Keep current canvas runtime constrained to highlight interaction until M4 UI modes are implemented.
+- M3.1d:
+  - Add per-concept contract table in backend LLM generator (objective, answer kinds, interaction types, phrasing bans, variation minimums).
+  - Inject selected concept contract into the `generateWithLLM` prompt before OpenAI call.
+  - Require question-family rotation across repeated attempts (diagram labeling/statement validation/scenario-based/etc.).
 
 **Files touched:**
 - `App/AppConfig.swift`
@@ -281,6 +285,7 @@
 3. Validate `expected=BC` and AI `detected=CB` is graded as correct after canonical normalization.
 4. Force malformed v2 payload (`response_contract` mismatch) and confirm deterministic validator rejection before render.
 5. Confirm app still operates in highlight mode only (M3 scope), with schema v2 accepted end-to-end.
+6. For the same concept+difficulty over multiple attempts, verify prompt logs/specs show varied question family and no prohibited generic phrasing.
 
 **Acceptance criteria:**
 - Dynamic question generation path is active by default in app runtime.
@@ -473,16 +478,11 @@
   4. Trigger rating flow and verify client + server logs include `/api/triangles/rate` request and response summaries.
   5. Intentionally cause malformed payload in local testing and verify validation/error logs clearly identify failure stage and reasons.
 
-**Implementation notes (2026-02-26, M5 response_mode-routed deterministic scoring path):**
+**Implementation notes (2026-02-26, concept-to-interaction policy mapping for M3 generation):**
 - Files touched:
-  - `backend/app/api/triangles/check/route.ts`
-  - `Features/Canvas/CanvasSandboxView.swift`
-  - `Features/Canvas/TriangleAIChecker.swift`
-  - `Features/Canvas/TriangleModels.swift`
   - `Features/Canvas/ValidatedLLMQuestionProvider.swift`
+  - `SmartTutorTests/InteractionPolicyTests.swift` (new)
 - Manual test steps:
-  1. Submit a `highlight` interaction and verify `/api/triangles/check` still sends `combined_png_base64` and uses the vision + LLM path.
-  2. Submit a `multiple_choice` interaction with `submitted_choice_id` and verify backend returns deterministic correctness without invoking image analysis.
-  3. Submit a `numeric_input` interaction with `submitted_numeric_value` and verify tolerance is read from `response_contract.numeric_rule.tolerance`.
-  4. Confirm client `runAICheck` bypasses canvas-image gate for non-highlight modes and sends non-visual submission fields.
-  5. Verify mastery outcome updates continue to run for all three modes.
+  1. Run `xcodebuild test -scheme SmartTutor -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:SmartTutorTests/InteractionPolicyTests` and verify policy mapping tests pass.
+  2. Trigger question generation for a basics concept and inspect logs/request payload to confirm `allowed_interaction_types` includes `highlight` + `multiple_choice`.
+  3. Trigger question generation for a Pythagoras concept and inspect logs/request payload to confirm `numeric_input` is included (with `highlight` only for relevant concepts).

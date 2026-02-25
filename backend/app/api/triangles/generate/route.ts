@@ -1,4 +1,4 @@
-import { generateWithLLM, validateQuestionSpec } from "../../../lib/m3";
+import { generateWithLLM, normalizeLearnerContext, validateNovelty, validateQuestionSpec } from "../../../lib/m3";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -26,6 +26,7 @@ export async function POST(request: Request) {
     const conceptId = body.concept_id ?? "tri.structure.hypotenuse";
     const grade = body.grade ?? 6;
     const allowed = body.allowed_interaction_types ?? ["highlight", "multiple_choice"];
+    const learnerContext = normalizeLearnerContext(body.learner_context);
     const targetBand = body.target_band?.min != null && body.target_band?.max != null
       ? { min: body.target_band.min, max: body.target_band.max }
       : undefined;
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
       target_band: targetBand ?? null,
       target_direction: body.target_direction ?? null,
       allowed_interaction_types: allowed,
-      learner_context: body.learner_context ?? {}
+      learner_context: learnerContext
     }));
 
     const questionSpec = await generateWithLLM({
@@ -44,13 +45,16 @@ export async function POST(request: Request) {
       grade,
       allowedInteractionTypes: allowed,
       targetBand,
-      targetDirection: body.target_direction
+      targetDirection: body.target_direction,
+      learnerContext
     });
 
     const errors = validateQuestionSpec(questionSpec, allowed);
-    if (errors.length > 0) {
-      console.log("[API][Generate][ValidationFailed]", JSON.stringify({ concept_id: conceptId, reasons: errors }));
-      return jsonResponse({ error: "invalid_question_spec", reasons: errors }, 422);
+    const noveltyErrors = validateNovelty(questionSpec, learnerContext);
+    const allErrors = [...errors, ...noveltyErrors];
+    if (allErrors.length > 0) {
+      console.log("[API][Generate][ValidationFailed]", JSON.stringify({ concept_id: conceptId, reasons: allErrors }));
+      return jsonResponse({ error: "invalid_question_spec", reasons: allErrors }, 422);
     }
 
     console.log("[API][Generate][Response]", JSON.stringify({
