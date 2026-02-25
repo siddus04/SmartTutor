@@ -175,7 +175,8 @@ enum TriangleAdapter {
                 intent: intent.rawValue,
                 interactionType: spec.interactionType,
                 responseMode: spec.responseContract.mode,
-                promptText: spec.prompt
+                promptText: spec.prompt,
+                responseContract: spec.responseContract
             )
         )
     }

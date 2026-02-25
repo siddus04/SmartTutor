@@ -472,3 +472,17 @@
   3. Confirm server logs include check request metadata (hash/length/path), raw LLM detect output, raw LLM feedback output, and final response JSON.
   4. Trigger rating flow and verify client + server logs include `/api/triangles/rate` request and response summaries.
   5. Intentionally cause malformed payload in local testing and verify validation/error logs clearly identify failure stage and reasons.
+
+**Implementation notes (2026-02-26, M5 response_mode-routed deterministic scoring path):**
+- Files touched:
+  - `backend/app/api/triangles/check/route.ts`
+  - `Features/Canvas/CanvasSandboxView.swift`
+  - `Features/Canvas/TriangleAIChecker.swift`
+  - `Features/Canvas/TriangleModels.swift`
+  - `Features/Canvas/ValidatedLLMQuestionProvider.swift`
+- Manual test steps:
+  1. Submit a `highlight` interaction and verify `/api/triangles/check` still sends `combined_png_base64` and uses the vision + LLM path.
+  2. Submit a `multiple_choice` interaction with `submitted_choice_id` and verify backend returns deterministic correctness without invoking image analysis.
+  3. Submit a `numeric_input` interaction with `submitted_numeric_value` and verify tolerance is read from `response_contract.numeric_rule.tolerance`.
+  4. Confirm client `runAICheck` bypasses canvas-image gate for non-highlight modes and sends non-visual submission fields.
+  5. Verify mastery outcome updates continue to run for all three modes.
