@@ -37,9 +37,13 @@ struct LiveTriangleAPIClient: TriangleAPIClient {
             allowedInteractionTypes: allowedInteractionTypes,
             learnerContext: [:]
         )
-        request.httpBody = try JSONEncoder().encode(payload)
+        let requestData = try JSONEncoder().encode(payload)
+        request.httpBody = requestData
+        logJSON("[TriangleAPI][Generate][Request]", data: requestData)
 
         let (data, response) = try await URLSession.shared.data(for: request)
+        logHTTP("[TriangleAPI][Generate]", response: response)
+        logJSON("[TriangleAPI][Generate][Response]", data: data)
         try ensureSuccess(response: response)
         return try JSONDecoder().decode(GeneratedQuestionEnvelope.self, from: data)
     }
@@ -53,9 +57,13 @@ struct LiveTriangleAPIClient: TriangleAPIClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let payload = RateDifficultyRequest(questionSpec: questionSpec, grade: grade)
-        request.httpBody = try JSONEncoder().encode(payload)
+        let requestData = try JSONEncoder().encode(payload)
+        request.httpBody = requestData
+        logJSON("[TriangleAPI][Rate][Request]", data: requestData)
 
         let (data, response) = try await URLSession.shared.data(for: request)
+        logHTTP("[TriangleAPI][Rate]", response: response)
+        logJSON("[TriangleAPI][Rate][Response]", data: data)
         try ensureSuccess(response: response)
         return try JSONDecoder().decode(DifficultyRating.self, from: data)
     }
@@ -64,6 +72,28 @@ struct LiveTriangleAPIClient: TriangleAPIClient {
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
             throw URLError(.badServerResponse)
         }
+    }
+
+    private func logHTTP(_ prefix: String, response: URLResponse) {
+        guard let http = response as? HTTPURLResponse else {
+            print("\(prefix) response=<non-http>")
+            return
+        }
+        print("\(prefix) status=\(http.statusCode) url=\(http.url?.absoluteString ?? "nil")")
+    }
+
+    private func logJSON(_ prefix: String, data: Data) {
+        guard
+            let object = try? JSONSerialization.jsonObject(with: data),
+            let prettyData = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
+            let text = String(data: prettyData, encoding: .utf8)
+        else {
+            let fallback = String(data: data, encoding: .utf8) ?? "<non-utf8>"
+            print("\(prefix) \(fallback)")
+            return
+        }
+
+        print("\(prefix)\n\(text)")
     }
 }
 
