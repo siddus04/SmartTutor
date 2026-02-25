@@ -472,3 +472,12 @@
   3. Confirm server logs include check request metadata (hash/length/path), raw LLM detect output, raw LLM feedback output, and final response JSON.
   4. Trigger rating flow and verify client + server logs include `/api/triangles/rate` request and response summaries.
   5. Intentionally cause malformed payload in local testing and verify validation/error logs clearly identify failure stage and reasons.
+
+**Implementation notes (2026-02-26, concept-to-interaction policy mapping for M3 generation):**
+- Files touched:
+  - `Features/Canvas/ValidatedLLMQuestionProvider.swift`
+  - `SmartTutorTests/InteractionPolicyTests.swift` (new)
+- Manual test steps:
+  1. Run `xcodebuild test -scheme SmartTutor -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:SmartTutorTests/InteractionPolicyTests` and verify policy mapping tests pass.
+  2. Trigger question generation for a basics concept and inspect logs/request payload to confirm `allowed_interaction_types` includes `highlight` + `multiple_choice`.
+  3. Trigger question generation for a Pythagoras concept and inspect logs/request payload to confirm `numeric_input` is included (with `highlight` only for relevant concepts).
