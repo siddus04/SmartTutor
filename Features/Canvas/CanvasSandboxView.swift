@@ -243,10 +243,13 @@ struct CanvasSandboxView: View {
         let conceptId = latestBase?.conceptId ?? session.progression.currentConceptId
         guard let conceptId else { return }
 
+        let normalizedExpected = normalizeSegmentLabel(expected)
+        let normalizedDetected = normalizeSegmentLabel(detected)
+
         let outcome: MasteryOutcome
         if ambiguity >= 0.6 || detected == nil {
             outcome = .ambiguous
-        } else if detected == expected {
+        } else if normalizedDetected == normalizedExpected {
             outcome = .correct
         } else {
             outcome = .incorrect
@@ -324,10 +327,11 @@ struct CanvasSandboxView: View {
 
             if let detected = result.detectedSegment, result.ambiguityScore < 0.6 {
                 let expected = base.answer?.value ?? "AB"
-                let followUp = detected == expected ? "✅ Correct" : "❌ Try again"
+                let isCorrect = normalizeSegmentLabel(detected) == normalizeSegmentLabel(expected)
+                let followUp = isCorrect ? "✅ Correct" : "❌ Try again"
                 await MainActor.run {
                     messages.append(ChatMessage(text: followUp, isAssistant: true))
-                    if detected != expected {
+                    if !isCorrect {
                         canvasController.clear()
                         selectedSegment = nil
                     }
@@ -435,10 +439,12 @@ struct CanvasSandboxView: View {
         let checker = TriangleAIChecker()
         let expectedSegment = base.answer?.value ?? "AB"
         let envelope = await checker.check(
-            concept: "triangle_hypotenuse",
-            task: "circle_hypotenuse",
+            conceptId: base.conceptId ?? "tri.basics.identify_right_triangle",
+            promptText: base.promptText ?? base.tutorMessages.first?.text ?? "",
+            interactionType: base.interactionType ?? "highlight",
+            responseMode: base.responseMode ?? "highlight",
             rightAngleAt: base.diagramSpec?.rightAngleAt,
-            expectedAnswerSegment: expectedSegment,
+            expectedAnswerValue: expectedSegment,
             combinedPNGBase64: combinedBase64
         )
         return envelope
@@ -446,6 +452,19 @@ struct CanvasSandboxView: View {
         print("[AICheck] Warning: AI check unsupported on this platform")
         return nil
 #endif
+    }
+
+    private func normalizeSegmentLabel(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let cleaned = value.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleaned.count == 2 else { return cleaned }
+        let chars = cleaned.map { String($0) }.sorted().joined()
+        switch chars {
+        case "AB": return "AB"
+        case "AC": return "CA"
+        case "BC": return "BC"
+        default: return cleaned
+        }
     }
 
     private func startThinkingAnimation() {

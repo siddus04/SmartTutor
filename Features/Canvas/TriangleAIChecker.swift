@@ -24,10 +24,12 @@ final class TriangleAIChecker {
     }
 
     func check(
-        concept: String,
-        task: String,
+        conceptId: String,
+        promptText: String,
+        interactionType: String,
+        responseMode: String,
         rightAngleAt: String?,
-        expectedAnswerSegment: String,
+        expectedAnswerValue: String,
         combinedPNGBase64: String
     ) async -> ResultEnvelope {
         guard let url = URL(string: AppConfig.aiCheckBaseURL + "api/triangles/check") else {
@@ -41,11 +43,13 @@ final class TriangleAIChecker {
         request.setValue("no-cache", forHTTPHeaderField: "Pragma")
         request.cachePolicy = .reloadIgnoringLocalCacheData
         let payload: [String: Any?] = [
-            "concept": concept,
-            "task": task,
+            "concept_id": conceptId,
+            "prompt_text": promptText,
+            "interaction_type": interactionType,
+            "response_mode": responseMode,
             "right_angle_at": rightAngleAt,
             "combined_png_base64": combinedPNGBase64,
-            "expected_answer_segment": expectedAnswerSegment
+            "expected_answer_value": expectedAnswerValue
         ]
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload, options: [])
 
@@ -68,7 +72,7 @@ final class TriangleAIChecker {
                 ambiguityScore: 0.25,
                 confidence: 0.75,
                 reasonCodes: ["MOCK_MODE"],
-                studentFeedback: "*(AI check - mock)* I can see a circle near the base. If you meant the hypotenuse, remember it’s opposite the right angle."
+                studentFeedback: "*(AI check - mock)* I can see a circle near one side. Re-check the prompt and side labels."
             )
         }
         return TriangleAICheckResult(

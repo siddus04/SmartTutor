@@ -17,6 +17,9 @@ struct TriangleBase: Codable {
     let conceptId: String?
     let difficulty: Int?
     let intent: String?
+    let interactionType: String?
+    let responseMode: String?
+    let promptText: String?
 
     enum CodingKeys: String, CodingKey {
         case tutorMessages = "tutor_messages"
@@ -25,6 +28,9 @@ struct TriangleBase: Codable {
         case conceptId = "concept_id"
         case difficulty
         case intent
+        case interactionType = "interaction_type"
+        case responseMode = "response_mode"
+        case promptText = "prompt_text"
     }
 
     init(
@@ -33,7 +39,10 @@ struct TriangleBase: Codable {
         answer: TriangleAnswer?,
         conceptId: String? = nil,
         difficulty: Int? = nil,
-        intent: String? = nil
+        intent: String? = nil,
+        interactionType: String? = nil,
+        responseMode: String? = nil,
+        promptText: String? = nil
     ) {
         self.tutorMessages = tutorMessages
         self.diagramSpec = diagramSpec
@@ -41,6 +50,9 @@ struct TriangleBase: Codable {
         self.conceptId = conceptId
         self.difficulty = difficulty
         self.intent = intent
+        self.interactionType = interactionType
+        self.responseMode = responseMode
+        self.promptText = promptText
     }
 }
 
@@ -100,7 +112,7 @@ struct QuestionSpec: Codable {
     let difficultyMetadata: DifficultyMetadata
     let diagramSpec: DiagramSpec
     let prompt: String
-    let answer: SpecAnswer
+    let responseContract: ResponseContract
     let hint: String
     let explanation: String
     let realWorldConnection: String
@@ -114,7 +126,7 @@ struct QuestionSpec: Codable {
         case difficultyMetadata = "difficulty_metadata"
         case diagramSpec = "diagram_spec"
         case prompt
-        case answer
+        case responseContract = "response_contract"
         case hint
         case explanation
         case realWorldConnection = "real_world_connection"
@@ -145,6 +157,29 @@ struct DiagramPoint: Codable {
     let id: String
     let x: Double
     let y: Double
+}
+
+struct ResponseContract: Codable {
+    let mode: String
+    let answer: SpecAnswer
+    let options: [ResponseOption]?
+    let numericRule: NumericRule?
+
+    enum CodingKeys: String, CodingKey {
+        case mode
+        case answer
+        case options
+        case numericRule = "numeric_rule"
+    }
+}
+
+struct ResponseOption: Codable {
+    let id: String
+    let text: String
+}
+
+struct NumericRule: Codable {
+    let tolerance: Double?
 }
 
 struct SpecAnswer: Codable {
