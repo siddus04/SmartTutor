@@ -472,3 +472,15 @@
   3. Confirm server logs include check request metadata (hash/length/path), raw LLM detect output, raw LLM feedback output, and final response JSON.
   4. Trigger rating flow and verify client + server logs include `/api/triangles/rate` request and response summaries.
   5. Intentionally cause malformed payload in local testing and verify validation/error logs clearly identify failure stage and reasons.
+
+**Implementation notes (2026-02-26, M3 concept-semantic validation hardening):**
+- Files touched:
+  - `backend/app/lib/m3.ts`
+  - `backend/app/api/triangles/generate/route.ts`
+  - `Features/Canvas/ValidatedLLMQuestionProvider.swift`
+  - `SmartTutorTests/M3ValidationTests.swift`
+- Manual test steps:
+  1. Call `/api/triangles/generate` with a concept prompt that omits required concept language and verify a `422` response with `error=invalid_question_spec` and `concept_mismatch` reason.
+  2. Call `/api/triangles/generate` with repetitive low-information text fields and verify `generic_repetition` is returned in the reasons array.
+  3. Run iOS unit tests and verify `QuestionSpecValidator` rejects concept mismatch and generic repetition payloads before adapting them into `TriangleResponse`.
+  4. Verify successful valid payload flow still reaches difficulty rating and adapter conversion unchanged.

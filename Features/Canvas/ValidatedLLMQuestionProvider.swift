@@ -182,6 +182,54 @@ enum TriangleAdapter {
 }
 
 enum QuestionSpecValidator {
+    private struct ConceptSemanticRule {
+        let requiredSignalGroups: [[String]]
+        let forbiddenSignals: [String]
+    }
+
+    private static let conceptSemanticRules: [String: ConceptSemanticRule] = [
+        "tri.basics.identify_right_angle": ConceptSemanticRule(
+            requiredSignalGroups: [["right angle", "90"]],
+            forbiddenSignals: ["hypotenuse", "a2+b2", "a²+b²", "pythag"]
+        ),
+        "tri.basics.identify_right_triangle": ConceptSemanticRule(
+            requiredSignalGroups: [["right triangle", "right-angled triangle", "right angle"]],
+            forbiddenSignals: ["a2+b2", "a²+b²", "pythag"]
+        ),
+        "tri.basics.vertices_sides_angles": ConceptSemanticRule(
+            requiredSignalGroups: [["vertex", "vertices"], ["side"], ["angle"]],
+            forbiddenSignals: ["a2+b2", "a²+b²", "pythag"]
+        ),
+        "tri.structure.hypotenuse": ConceptSemanticRule(
+            requiredSignalGroups: [["hypotenuse"], ["right angle", "right triangle"]],
+            forbiddenSignals: ["a2+b2", "a²+b²", "pythag"]
+        ),
+        "tri.structure.legs": ConceptSemanticRule(
+            requiredSignalGroups: [["leg", "legs"]],
+            forbiddenSignals: ["hypotenuse only", "a2+b2", "a²+b²"]
+        ),
+        "tri.structure.opposite_adjacent_relative": ConceptSemanticRule(
+            requiredSignalGroups: [["opposite"], ["adjacent"]],
+            forbiddenSignals: ["sin", "cos", "tan"]
+        ),
+        "tri.reasoning.hypotenuse_longest": ConceptSemanticRule(
+            requiredSignalGroups: [["hypotenuse"], ["longest"]],
+            forbiddenSignals: ["a2+b2", "a²+b²", "pythag"]
+        ),
+        "tri.pyth.check_if_right_triangle": ConceptSemanticRule(
+            requiredSignalGroups: [["right triangle", "right-angle triangle"], ["a2+b2", "a²+b²", "pythag"]],
+            forbiddenSignals: ["sin", "cos", "tan"]
+        ),
+        "tri.pyth.equation_a2_b2_c2": ConceptSemanticRule(
+            requiredSignalGroups: [["a2+b2", "a²+b²", "c2", "c²", "pythag"]],
+            forbiddenSignals: ["sin", "cos", "tan"]
+        ),
+        "tri.pyth.solve_missing_side": ConceptSemanticRule(
+            requiredSignalGroups: [["missing side", "unknown side", "find side", "solve"], ["a2+b2", "a²+b²", "pythag"]],
+            forbiddenSignals: ["sin", "cos", "tan"]
+        )
+    ]
+
     static func validate(question: QuestionSpec, conceptId: String, allowedInteractionTypes: [String]) throws {
         guard question.schemaVersion == "m3.question_spec.v2" else { throw ValidationError.schema }
         guard question.grade == 6 else { throw ValidationError.gradeCap }
@@ -222,6 +270,62 @@ enum QuestionSpecValidator {
         default:
             throw ValidationError.interaction
         }
+
+        try validateConceptSemantics(question)
+    }
+
+    private static func validateConceptSemantics(_ question: QuestionSpec) throws {
+        let textPool = buildSemanticTextPool(question)
+        if let rule = conceptSemanticRules[question.conceptId] {
+            let missingRequired = rule.requiredSignalGroups.contains { group in
+                !group.contains { signal in textPool.contains(normalizeSignal(signal)) }
+            }
+            let hasForbidden = rule.forbiddenSignals.contains { signal in
+                textPool.contains(normalizeSignal(signal))
+            }
+            if missingRequired || hasForbidden {
+                throw ValidationError.conceptMismatch
+            }
+        }
+
+        if isGenericRepetition(question) {
+            throw ValidationError.genericRepetition
+        }
+    }
+
+    private static func buildSemanticTextPool(_ question: QuestionSpec) -> String {
+        let optionsText = question.responseContract.options?.map(\.text).joined(separator: " ") ?? ""
+        return normalizeSignal([
+            question.prompt,
+            question.hint,
+            question.explanation,
+            question.realWorldConnection,
+            question.responseContract.answer.value,
+            optionsText
+        ].joined(separator: " "))
+    }
+
+    private static func normalizeSignal(_ text: String) -> String {
+        text
+            .lowercased()
+            .replacingOccurrences(of: #"[^a-z0-9²+ ]"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func isGenericRepetition(_ question: QuestionSpec) -> Bool {
+        let normalizedBlocks = [question.prompt, question.hint, question.explanation].map(normalizeSignal)
+        let uniqueBlocks = Set(normalizedBlocks.filter { !$0.isEmpty })
+        if uniqueBlocks.count <= 1 {
+            return true
+        }
+
+        let words = normalizedBlocks
+            .joined(separator: " ")
+            .split(separator: " ")
+            .map(String.init)
+            .filter { $0.count > 2 }
+        return Set(words).count < 8
     }
 
     private static func triangleArea(from points: [DiagramPoint]) -> Double {
@@ -252,4 +356,6 @@ enum ValidationError: Error {
     case gradeCap
     case renderability
     case answerMismatch
+    case conceptMismatch
+    case genericRepetition
 }

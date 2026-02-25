@@ -39,6 +39,21 @@ export type DifficultyRating = {
   };
 };
 
+type ConceptSemanticRule = {
+  requiredSignalGroups: string[][];
+  forbiddenSignals: string[];
+};
+
+export class InvalidQuestionSpecError extends Error {
+  readonly reasons: string[];
+
+  constructor(reasons: string[]) {
+    super("invalid_question_spec");
+    this.name = "InvalidQuestionSpecError";
+    this.reasons = reasons;
+  }
+}
+
 const ontology = new Set([
   "tri.basics.identify_right_angle","tri.basics.identify_right_triangle","tri.basics.vertices_sides_angles",
   "tri.structure.hypotenuse","tri.structure.legs","tri.structure.opposite_adjacent_relative",
@@ -72,6 +87,7 @@ export function validateQuestionSpec(spec: QuestionSpec, allowedInteractionTypes
   }
   if (spec.interaction_type === "numeric_input" && (spec.response_contract.answer.kind !== "number" || Number.isNaN(Number(spec.response_contract.answer.value)))) errors.push("answer_mismatch");
   if (spec.interaction_type === "highlight" && !(spec.response_contract.answer.kind === "point_set" || spec.response_contract.answer.kind === "segment")) errors.push("answer_mismatch");
+  errors.push(...validateConceptSemantics(spec));
   return errors;
 }
 
@@ -102,8 +118,15 @@ export async function generateWithLLM(input: {
     });
     const text = response.output_text || "";
     const parsed = JSON.parse(text) as QuestionSpec;
+    const semanticErrors = validateConceptSemantics(parsed);
+    if (semanticErrors.length > 0) {
+      throw new InvalidQuestionSpecError(semanticErrors);
+    }
     return parsed;
-  } catch {
+  } catch (error) {
+    if (error instanceof InvalidQuestionSpecError) {
+      throw error;
+    }
     return fallback;
   }
 }
@@ -165,6 +188,97 @@ function triangleArea(spec: QuestionSpec): number {
   const c = spec.diagram_spec.points_normalized.find((point) => point.id === "C");
   if (!a || !b || !c) return 0;
   return Math.abs(a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y)) / 2;
+}
+
+const conceptSemanticRules: Record<string, ConceptSemanticRule> = {
+  "tri.basics.identify_right_angle": {
+    requiredSignalGroups: [["right angle", "90"]],
+    forbiddenSignals: ["hypotenuse", "a2+b2", "a²+b²", "pythag"]
+  },
+  "tri.basics.identify_right_triangle": {
+    requiredSignalGroups: [["right triangle", "right-angled triangle", "right angle"]],
+    forbiddenSignals: ["a2+b2", "a²+b²", "pythag"]
+  },
+  "tri.basics.vertices_sides_angles": {
+    requiredSignalGroups: [["vertex", "vertices"], ["side"], ["angle"]],
+    forbiddenSignals: ["a2+b2", "a²+b²", "pythag"]
+  },
+  "tri.structure.hypotenuse": {
+    requiredSignalGroups: [["hypotenuse"], ["right angle", "right triangle"]],
+    forbiddenSignals: ["a2+b2", "a²+b²", "pythag"]
+  },
+  "tri.structure.legs": {
+    requiredSignalGroups: [["leg", "legs"]],
+    forbiddenSignals: ["hypotenuse only", "a2+b2", "a²+b²"]
+  },
+  "tri.structure.opposite_adjacent_relative": {
+    requiredSignalGroups: [["opposite"], ["adjacent"]],
+    forbiddenSignals: ["sin", "cos", "tan"]
+  },
+  "tri.reasoning.hypotenuse_longest": {
+    requiredSignalGroups: [["hypotenuse"], ["longest"]],
+    forbiddenSignals: ["a2+b2", "a²+b²", "pythag"]
+  },
+  "tri.pyth.check_if_right_triangle": {
+    requiredSignalGroups: [["right triangle", "right-angle triangle"], ["a2+b2", "a²+b²", "pythag"]],
+    forbiddenSignals: ["sin", "cos", "tan"]
+  },
+  "tri.pyth.equation_a2_b2_c2": {
+    requiredSignalGroups: [["a2+b2", "a²+b²", "c2", "c²", "pythag"]],
+    forbiddenSignals: ["sin", "cos", "tan"]
+  },
+  "tri.pyth.solve_missing_side": {
+    requiredSignalGroups: [["missing side", "unknown side", "find side", "solve"], ["a2+b2", "a²+b²", "pythag"]],
+    forbiddenSignals: ["sin", "cos", "tan"]
+  }
+};
+
+export function validateConceptSemantics(spec: QuestionSpec): string[] {
+  const errors: string[] = [];
+  const textPool = buildSemanticTextPool(spec);
+  const rule = conceptSemanticRules[spec.concept_id];
+
+  if (rule) {
+    const missingRequired = rule.requiredSignalGroups.some((group) => !group.some((signal) => textPool.includes(normalizeSignal(signal))));
+    const hasForbidden = rule.forbiddenSignals.some((signal) => textPool.includes(normalizeSignal(signal)));
+    if (missingRequired || hasForbidden) {
+      errors.push("concept_mismatch");
+    }
+  }
+
+  if (isGenericRepetition(spec)) {
+    errors.push("generic_repetition");
+  }
+
+  return errors;
+}
+
+function buildSemanticTextPool(spec: QuestionSpec): string {
+  const optionText = spec.response_contract.options?.map((option) => option.text).join(" ") ?? "";
+  const combined = [
+    spec.prompt,
+    spec.hint,
+    spec.explanation,
+    spec.real_world_connection,
+    spec.response_contract.answer.value,
+    optionText
+  ].join(" ");
+  return normalizeSignal(combined);
+}
+
+function normalizeSignal(input: string): string {
+  return input.toLowerCase().replace(/\s+/g, " ").replace(/[^a-z0-9²+ ]/g, "").trim();
+}
+
+function isGenericRepetition(spec: QuestionSpec): boolean {
+  const normalizedBlocks = [spec.prompt, spec.hint, spec.explanation].map((value) => normalizeSignal(value));
+  const uniqueBlocks = new Set(normalizedBlocks.filter((value) => value.length > 0));
+  if (uniqueBlocks.size <= 1) {
+    return true;
+  }
+
+  const uniqueWords = new Set(normalizedBlocks.join(" ").split(" ").filter((word) => word.length > 2));
+  return uniqueWords.size < 8;
 }
 
 function makeFallbackSpec(conceptId: string, interactionType: string, difficulty: number): QuestionSpec {
