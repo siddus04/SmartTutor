@@ -30,6 +30,9 @@ final class TriangleAIChecker {
         responseMode: String,
         rightAngleAt: String?,
         expectedAnswerValue: String,
+        submittedChoiceId: String?,
+        submittedNumericValue: String?,
+        numericTolerance: Double?,
         combinedPNGBase64: String,
         mergedImagePath: String?
     ) async -> ResultEnvelope {
@@ -43,6 +46,11 @@ final class TriangleAIChecker {
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         request.setValue("no-cache", forHTTPHeaderField: "Pragma")
         request.cachePolicy = .reloadIgnoringLocalCacheData
+        var responseContract: [String: Any] = [:]
+        if let numericTolerance {
+            responseContract["numeric_rule"] = ["tolerance": numericTolerance]
+        }
+
         let payload: [String: Any?] = [
             "concept_id": conceptId,
             "prompt_text": promptText,
@@ -51,7 +59,10 @@ final class TriangleAIChecker {
             "right_angle_at": rightAngleAt,
             "merged_image_path": mergedImagePath,
             "combined_png_base64": combinedPNGBase64,
-            "expected_answer_value": expectedAnswerValue
+            "expected_answer_value": expectedAnswerValue,
+            "submitted_choice_id": submittedChoiceId,
+            "submitted_numeric_value": submittedNumericValue,
+            "response_contract": responseContract.isEmpty ? nil : responseContract
         ]
         let requestData = try? JSONSerialization.data(withJSONObject: payload, options: [])
         request.httpBody = requestData
