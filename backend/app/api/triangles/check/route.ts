@@ -98,10 +98,6 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: Request) {
-  if (!process.env.OPENAI_API_KEY) {
-    return jsonResponse(ERROR_MISCONFIGURED, 500);
-  }
-
   let body: {
     concept_id?: string;
     prompt_text?: string;
@@ -111,6 +107,13 @@ export async function POST(request: Request) {
     merged_image_path?: string;
     combined_png_base64?: string;
     expected_answer_value?: string;
+    submitted_choice_id?: string;
+    submitted_numeric_value?: string;
+    response_contract?: {
+      numeric_rule?: {
+        tolerance?: number;
+      };
+    };
   };
 
   try {
@@ -127,6 +130,9 @@ export async function POST(request: Request) {
   const mergedImagePath = body.merged_image_path ?? null;
   const combinedBase64 = body.combined_png_base64 ?? "";
   const expectedAnswerValue = body.expected_answer_value ?? "AB";
+  const submittedChoiceId = body.submitted_choice_id ?? null;
+  const submittedNumericValue = body.submitted_numeric_value ?? null;
+  const numericTolerance = body.response_contract?.numeric_rule?.tolerance;
 
   const header = `Concept: ${conceptId}\nPrompt: ${promptText}\nInteractionType: ${interactionType}\nResponseMode: ${responseMode}\nRightAngleAt: ${rightAngleAt ?? "null"}`;
   const fullPrompt = `${header}\n\n${PROMPT}`;
@@ -138,9 +144,28 @@ export async function POST(request: Request) {
     right_angle_at: rightAngleAt,
     merged_image_path: mergedImagePath,
     expected_answer_value: expectedAnswerValue,
+    submitted_choice_id: submittedChoiceId,
+    submitted_numeric_value: submittedNumericValue,
+    numeric_tolerance: numericTolerance ?? null,
     combined_png_base64_length: combinedBase64.length,
     combined_png_sha256_prefix: imageHash
   }));
+
+  if (responseMode === "multiple_choice") {
+    const deterministic = evaluateMultipleChoice(submittedChoiceId, expectedAnswerValue);
+    console.log("[API][Check][Deterministic][MultipleChoice]", JSON.stringify(deterministic));
+    return jsonResponse(deterministic, 200);
+  }
+
+  if (responseMode === "numeric_input") {
+    const deterministic = evaluateNumericInput(submittedNumericValue, expectedAnswerValue, numericTolerance);
+    console.log("[API][Check][Deterministic][NumericInput]", JSON.stringify(deterministic));
+    return jsonResponse(deterministic, 200);
+  }
+
+  if (!process.env.OPENAI_API_KEY) {
+    return jsonResponse(ERROR_MISCONFIGURED, 500);
+  }
 
   try {
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -234,6 +259,83 @@ function validateResponse(parsed: any, expected: string) {
     reason_codes: reasonCodes,
     student_feedback: ""
   };
+}
+
+function evaluateMultipleChoice(submittedChoiceId: string | null, expected: string) {
+  const normalizedExpected = normalizeChoiceId(expected);
+  const normalizedChoice = normalizeChoiceId(submittedChoiceId);
+
+  if (!normalizedChoice) {
+    return {
+      detected_segment: null,
+      ambiguity_score: 1,
+      confidence: 0,
+      reason_codes: ["NO_CHOICE_SUBMITTED"],
+      student_feedback: "Please pick one option before checking your answer."
+    };
+  }
+
+  const isCorrect = normalizedExpected != null && normalizedChoice === normalizedExpected;
+  return {
+    detected_segment: normalizedChoice,
+    ambiguity_score: 0,
+    confidence: 1,
+    reason_codes: [],
+    student_feedback: isCorrect
+      ? "Great choice—you picked the correct option."
+      : `You picked ${normalizedChoice}. That option is not correct for this question. Try again and use the hint.`
+  };
+}
+
+function evaluateNumericInput(submittedNumericValue: string | null, expected: string, tolerance: number | undefined) {
+  const parsedSubmitted = parseNumber(submittedNumericValue);
+  if (parsedSubmitted == null) {
+    return {
+      detected_segment: null,
+      ambiguity_score: 1,
+      confidence: 0,
+      reason_codes: ["INVALID_NUMERIC_INPUT"],
+      student_feedback: "Please enter a valid number before checking your answer."
+    };
+  }
+
+  const parsedExpected = parseNumber(expected);
+  if (parsedExpected == null) {
+    return {
+      detected_segment: null,
+      ambiguity_score: 1,
+      confidence: 0,
+      reason_codes: ["OTHER"],
+      student_feedback: "This question is missing a valid numeric answer key."
+    };
+  }
+
+  const appliedTolerance = typeof tolerance === "number" && Number.isFinite(tolerance) ? Math.abs(tolerance) : 0;
+  const difference = Math.abs(parsedSubmitted - parsedExpected);
+  const isCorrect = difference <= appliedTolerance;
+
+  return {
+    detected_segment: String(parsedSubmitted),
+    ambiguity_score: 0,
+    confidence: 1,
+    reason_codes: [],
+    student_feedback: isCorrect
+      ? "Nice work—your numeric answer is within the allowed tolerance."
+      : `Your answer ${parsedSubmitted} is not within ±${appliedTolerance} of the expected value. Try again.`
+  };
+}
+
+function normalizeChoiceId(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const cleaned = value.trim();
+  return cleaned.length > 0 ? cleaned : null;
+}
+
+function parseNumber(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = Number(value.trim());
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
 }
 
 function jsonResponse(payload: unknown, status: number) {

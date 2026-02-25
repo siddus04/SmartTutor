@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { createHash } from "crypto";
 
 export type QuestionSpec = {
   schema_version: "m3.question_spec.v2";
@@ -53,6 +54,22 @@ export class InvalidQuestionSpecError extends Error {
     this.reasons = reasons;
   }
 }
+export type LearnerContext = {
+  recentConceptIds: string[];
+  recentPromptHashes: string[];
+  recentInteractionTypes: string[];
+  recentExpectedAnswers: string[];
+};
+
+export type NoveltyConfig = {
+  promptHashWindow: number;
+  expectedAnswerRepeatLimit: number;
+};
+
+const DEFAULT_NOVELTY_CONFIG: NoveltyConfig = {
+  promptHashWindow: 3,
+  expectedAnswerRepeatLimit: 2
+};
 
 const ontology = new Set([
   "tri.basics.identify_right_angle","tri.basics.identify_right_triangle","tri.basics.vertices_sides_angles",
@@ -61,6 +78,233 @@ const ontology = new Set([
   "tri.pyth.check_if_right_triangle","tri.pyth.equation_a2_b2_c2","tri.pyth.solve_missing_side","tri.pyth.square_area_intuition","tri.pyth.square_numbers_refresher",
   "tri.app.mixed_mastery_test","tri.app.real_life_modeling","tri.app.word_problems"
 ]);
+
+type ConceptContract = {
+  requiredSkillObjective: string;
+  allowedAnswerKinds: string[];
+  allowedInteractionTypes: QuestionSpec["interaction_type"][];
+  prohibitedGenericPhrasing: string[];
+  minimumVariationRequirements: {
+    wording: string;
+    diagram: string;
+    answerTarget: string;
+  };
+};
+
+const baseProhibitedGenericPhrasing = [
+  "answer the question",
+  "look at the triangle",
+  "use the diagram",
+  "choose the correct answer",
+  "solve this"
+];
+
+const conceptContractTable: Record<string, ConceptContract> = {
+  "tri.basics.identify_right_angle": {
+    requiredSkillObjective: "Identify the right angle in a labeled triangle.",
+    allowedAnswerKinds: ["point_set", "option_id"],
+    allowedInteractionTypes: ["highlight", "multiple_choice"],
+    prohibitedGenericPhrasing: baseProhibitedGenericPhrasing,
+    minimumVariationRequirements: {
+      wording: "Rotate sentence stems and angle naming format (e.g., ∠ABC vs right-angle marker).",
+      diagram: "Change the right-angle vertex and orientation across attempts.",
+      answerTarget: "Alternate target among vertices while keeping one unique correct right angle."
+    }
+  },
+  "tri.basics.identify_right_triangle": {
+    requiredSkillObjective: "Determine whether a shown triangle is a right triangle.",
+    allowedAnswerKinds: ["option_id"],
+    allowedInteractionTypes: ["multiple_choice"],
+    prohibitedGenericPhrasing: baseProhibitedGenericPhrasing,
+    minimumVariationRequirements: {
+      wording: "Vary prompt language between identify/classify/justify-lite forms.",
+      diagram: "Mix right and non-right triangles with different orientations.",
+      answerTarget: "Switch which option is correct between yes/no style choices."
+    }
+  },
+  "tri.basics.vertices_sides_angles": {
+    requiredSkillObjective: "Map between named vertices, sides, and angles in a triangle.",
+    allowedAnswerKinds: ["segment", "point_set", "option_id"],
+    allowedInteractionTypes: ["highlight", "multiple_choice"],
+    prohibitedGenericPhrasing: baseProhibitedGenericPhrasing,
+    minimumVariationRequirements: {
+      wording: "Alternate whether prompt asks for vertex, side, or angle identification.",
+      diagram: "Re-label triangle points and orientation while staying renderable.",
+      answerTarget: "Cycle target between AB/BC/CA and A/B/C references."
+    }
+  },
+  "tri.structure.hypotenuse": {
+    requiredSkillObjective: "Identify the hypotenuse as the side opposite the right angle.",
+    allowedAnswerKinds: ["segment", "option_id"],
+    allowedInteractionTypes: ["highlight", "multiple_choice"],
+    prohibitedGenericPhrasing: [...baseProhibitedGenericPhrasing, "find the longest side"],
+    minimumVariationRequirements: {
+      wording: "Use both structural wording (opposite right angle) and constrained comparative wording.",
+      diagram: "Vary right-angle location and segment labels.",
+      answerTarget: "Ensure the hypotenuse label differs across attempts."
+    }
+  },
+  "tri.structure.legs": {
+    requiredSkillObjective: "Identify the two legs that form the right angle.",
+    allowedAnswerKinds: ["segment", "point_set", "option_id"],
+    allowedInteractionTypes: ["highlight", "multiple_choice"],
+    prohibitedGenericPhrasing: [...baseProhibitedGenericPhrasing, "pick any two sides"],
+    minimumVariationRequirements: {
+      wording: "Vary wording between 'legs', 'sides forming right angle', and 'perpendicular sides'.",
+      diagram: "Change right-angle vertex and keep leg pairs explicit.",
+      answerTarget: "Alternate whether one leg or both-leg set is the required answer."
+    }
+  },
+  "tri.structure.opposite_adjacent_relative": {
+    requiredSkillObjective: "Determine opposite/adjacent sides relative to a referenced acute angle.",
+    allowedAnswerKinds: ["segment", "option_id"],
+    allowedInteractionTypes: ["highlight", "multiple_choice"],
+    prohibitedGenericPhrasing: [...baseProhibitedGenericPhrasing, "opposite means across"],
+    minimumVariationRequirements: {
+      wording: "Alternate reference-angle naming conventions and relation requested (opposite vs adjacent).",
+      diagram: "Change the reference acute angle and side labels each attempt.",
+      answerTarget: "Switch correct segment target between opposite and adjacent roles."
+    }
+  },
+  "tri.reasoning.compare_side_lengths": {
+    requiredSkillObjective: "Compare side lengths using right-triangle structure and provided measures.",
+    allowedAnswerKinds: ["option_id", "number"],
+    allowedInteractionTypes: ["multiple_choice", "numeric_input"],
+    prohibitedGenericPhrasing: [...baseProhibitedGenericPhrasing, "just compare visually"],
+    minimumVariationRequirements: {
+      wording: "Mix prompts asking for greater/less/equal or ordering.",
+      diagram: "Vary value placement and side labels without ambiguity.",
+      answerTarget: "Alternate correct target between segment labels and computed numeric comparisons."
+    }
+  },
+  "tri.reasoning.hypotenuse_longest": {
+    requiredSkillObjective: "Reason that hypotenuse is the longest side in a right triangle.",
+    allowedAnswerKinds: ["segment", "option_id"],
+    allowedInteractionTypes: ["highlight", "multiple_choice"],
+    prohibitedGenericPhrasing: [...baseProhibitedGenericPhrasing, "because it looks longest"],
+    minimumVariationRequirements: {
+      wording: "Rotate between identify/explain-lite/true-false style stems.",
+      diagram: "Use distinct scalings and orientations with clear right-angle marking.",
+      answerTarget: "Change which segment is hypotenuse across attempts."
+    }
+  },
+  "tri.reasoning.informal_side_relationships": {
+    requiredSkillObjective: "Use informal side relationships to evaluate triangle statements.",
+    allowedAnswerKinds: ["option_id"],
+    allowedInteractionTypes: ["multiple_choice"],
+    prohibitedGenericPhrasing: [...baseProhibitedGenericPhrasing, "pick what seems right"],
+    minimumVariationRequirements: {
+      wording: "Alternate between statement validation and completion prompts.",
+      diagram: "Vary given side values and right-angle placement.",
+      answerTarget: "Move correctness among options each attempt."
+    }
+  },
+  "tri.pyth.check_if_right_triangle": {
+    requiredSkillObjective: "Check if side lengths satisfy the Pythagorean relationship.",
+    allowedAnswerKinds: ["option_id"],
+    allowedInteractionTypes: ["multiple_choice"],
+    prohibitedGenericPhrasing: [...baseProhibitedGenericPhrasing, "use the formula"],
+    minimumVariationRequirements: {
+      wording: "Vary between yes/no judgment and choose-valid-statement forms.",
+      diagram: "Change side-length triplets including both valid and invalid sets.",
+      answerTarget: "Alternate which option corresponds to 'is right triangle'."
+    }
+  },
+  "tri.pyth.equation_a2_b2_c2": {
+    requiredSkillObjective: "Write or select the correct equation a² + b² = c² for a right triangle.",
+    allowedAnswerKinds: ["option_id"],
+    allowedInteractionTypes: ["multiple_choice"],
+    prohibitedGenericPhrasing: [...baseProhibitedGenericPhrasing, "memorize the equation"],
+    minimumVariationRequirements: {
+      wording: "Vary between fill-the-equation and identify-correct-equation phrasing.",
+      diagram: "Change which side is marked as hypotenuse and corresponding labels.",
+      answerTarget: "Rotate correct option placement and variable mapping."
+    }
+  },
+  "tri.pyth.solve_missing_side": {
+    requiredSkillObjective: "Solve for a missing side in a right triangle using a² + b² = c².",
+    allowedAnswerKinds: ["number", "option_id"],
+    allowedInteractionTypes: ["numeric_input", "multiple_choice"],
+    prohibitedGenericPhrasing: [...baseProhibitedGenericPhrasing, "do the calculation"],
+    minimumVariationRequirements: {
+      wording: "Alternate between direct compute prompts and contextualized short scenarios.",
+      diagram: "Vary known-side pairs and whether missing side is leg or hypotenuse.",
+      answerTarget: "Switch answer target among different missing sides and values."
+    }
+  },
+  "tri.pyth.square_area_intuition": {
+    requiredSkillObjective: "Connect squares on sides to the Pythagorean area relationship.",
+    allowedAnswerKinds: ["option_id", "number"],
+    allowedInteractionTypes: ["multiple_choice", "numeric_input"],
+    prohibitedGenericPhrasing: [...baseProhibitedGenericPhrasing, "area always adds"],
+    minimumVariationRequirements: {
+      wording: "Vary statement-check and compute-area-intuition wording.",
+      diagram: "Change side lengths and square annotations deterministically.",
+      answerTarget: "Alternate between selecting valid statement and entering area-based value."
+    }
+  },
+  "tri.pyth.square_numbers_refresher": {
+    requiredSkillObjective: "Recall square numbers needed for Pythagorean computations.",
+    allowedAnswerKinds: ["number", "option_id"],
+    allowedInteractionTypes: ["numeric_input", "multiple_choice"],
+    prohibitedGenericPhrasing: [...baseProhibitedGenericPhrasing, "just square it"],
+    minimumVariationRequirements: {
+      wording: "Mix direct square lookup, reverse-square, and missing-value stems.",
+      diagram: "If diagram used, vary which side receives the square value focus.",
+      answerTarget: "Change target value and numeric result each attempt."
+    }
+  },
+  "tri.app.mixed_mastery_test": {
+    requiredSkillObjective: "Apply multiple triangle skills in a single mixed mastery prompt.",
+    allowedAnswerKinds: ["option_id", "number", "segment"],
+    allowedInteractionTypes: ["highlight", "multiple_choice", "numeric_input"],
+    prohibitedGenericPhrasing: [...baseProhibitedGenericPhrasing, "use any method"],
+    minimumVariationRequirements: {
+      wording: "Vary dominant sub-skill and context framing each attempt.",
+      diagram: "Change which triangle feature carries the key clue.",
+      answerTarget: "Rotate between structural, numeric, and validation outcomes."
+    }
+  },
+  "tri.app.real_life_modeling": {
+    requiredSkillObjective: "Model real-life right-triangle situations and infer unknowns.",
+    allowedAnswerKinds: ["number", "option_id"],
+    allowedInteractionTypes: ["numeric_input", "multiple_choice"],
+    prohibitedGenericPhrasing: [...baseProhibitedGenericPhrasing, "in real life"],
+    minimumVariationRequirements: {
+      wording: "Rotate scenario domain (ladder, ramp, path, roof) and ask variant.",
+      diagram: "Change contextual labels and known measures while keeping triangle deterministic.",
+      answerTarget: "Alternate missing quantity (height/base/hypotenuse) across attempts."
+    }
+  },
+  "tri.app.word_problems": {
+    requiredSkillObjective: "Interpret triangle word problems and produce correct triangle-based answer.",
+    allowedAnswerKinds: ["number", "option_id"],
+    allowedInteractionTypes: ["numeric_input", "multiple_choice"],
+    prohibitedGenericPhrasing: [...baseProhibitedGenericPhrasing, "read carefully"],
+    minimumVariationRequirements: {
+      wording: "Vary sentence structure and what must be inferred from text.",
+      diagram: "Alter supporting diagram orientation/labels or omit when appropriate.",
+      answerTarget: "Change which unknown is solved and final answer form."
+    }
+  }
+};
+
+function buildConceptContractText(input: { conceptId: string; allowedInteractionTypes: string[] }): string {
+  const selected = conceptContractTable[input.conceptId];
+  if (!selected) return "No concept-specific contract found. Keep response strictly in schema and scope.";
+
+  const interactionTypes = selected.allowedInteractionTypes.filter((interactionType) => input.allowedInteractionTypes.includes(interactionType));
+  const effectiveInteractionTypes = interactionTypes.length > 0 ? interactionTypes : input.allowedInteractionTypes;
+  return [
+    `Concept contract for ${input.conceptId}:`,
+    `- Required skill objective: ${selected.requiredSkillObjective}`,
+    `- Allowed answer kinds: ${selected.allowedAnswerKinds.join(", ")}`,
+    `- Allowed interaction types for this concept: ${effectiveInteractionTypes.join(", ")}`,
+    `- Prohibited generic phrasing: ${selected.prohibitedGenericPhrasing.join(" | ")}`,
+    `- Minimum variation requirements: wording=${selected.minimumVariationRequirements.wording}; diagram=${selected.minimumVariationRequirements.diagram}; answer_target=${selected.minimumVariationRequirements.answerTarget}`,
+    "- Across repeated attempts for the same concept and difficulty, explicitly vary question family (e.g., diagram labeling, statement validation, scenario-based prompt, equation completion, numerical solve)."
+  ].join("\n");
+}
 
 export function validateQuestionSpec(spec: QuestionSpec, allowedInteractionTypes: string[]): string[] {
   const errors: string[] = [];
@@ -91,6 +335,49 @@ export function validateQuestionSpec(spec: QuestionSpec, allowedInteractionTypes
   return errors;
 }
 
+export function normalizeLearnerContext(raw: unknown): LearnerContext {
+  if (!raw || typeof raw !== "object") {
+    return {
+      recentConceptIds: [],
+      recentPromptHashes: [],
+      recentInteractionTypes: [],
+      recentExpectedAnswers: []
+    };
+  }
+
+  const payload = raw as Record<string, unknown>;
+  return {
+    recentConceptIds: readStringArray(payload.recent_concept_ids),
+    recentPromptHashes: readStringArray(payload.recent_prompt_hashes),
+    recentInteractionTypes: readStringArray(payload.recent_interaction_types),
+    recentExpectedAnswers: readStringArray(payload.recent_expected_answers)
+  };
+}
+
+export function validateNovelty(spec: QuestionSpec, learnerContext: LearnerContext, config: NoveltyConfig = DEFAULT_NOVELTY_CONFIG): string[] {
+  const violations: string[] = [];
+  const promptHash = promptTemplateHash(spec.prompt);
+  const expectedTarget = expectedAnswerKey(spec);
+
+  if (learnerContext.recentPromptHashes.slice(-config.promptHashWindow).includes(promptHash)) {
+    violations.push("novelty_violation");
+  }
+
+  const repeats = learnerContext.recentExpectedAnswers.filter((value) => value === expectedTarget).length;
+  if (repeats >= config.expectedAnswerRepeatLimit) {
+    violations.push("novelty_violation");
+  }
+
+  return [...new Set(violations)];
+}
+
+export function prioritizeInteractionTypes(allowedInteractionTypes: string[], learnerContext: LearnerContext): string[] {
+  const unseen = allowedInteractionTypes.filter((type) => !learnerContext.recentInteractionTypes.includes(type));
+  if (unseen.length === 0) return allowedInteractionTypes;
+  const seen = allowedInteractionTypes.filter((type) => learnerContext.recentInteractionTypes.includes(type));
+  return [...unseen, ...seen];
+}
+
 export function validateDifficultyRating(rating: DifficultyRating): string[] {
   const errors: string[] = [];
   if (rating.schema_version !== "m3.difficulty_rating.v1") errors.push("schema");
@@ -105,11 +392,20 @@ export async function generateWithLLM(input: {
   allowedInteractionTypes: string[];
   targetDirection?: string;
   targetBand?: { min: number; max: number };
+  learnerContext?: LearnerContext;
 }): Promise<QuestionSpec> {
-  const fallback = makeFallbackSpec(input.conceptId, input.allowedInteractionTypes[0] ?? "highlight", input.targetBand?.min ?? 2);
+  const learnerContext = input.learnerContext ?? {
+    recentConceptIds: [],
+    recentPromptHashes: [],
+    recentInteractionTypes: [],
+    recentExpectedAnswers: []
+  };
+  const prioritizedInteractions = prioritizeInteractionTypes(input.allowedInteractionTypes, learnerContext);
+  const fallback = makeFallbackSpec(input.conceptId, prioritizedInteractions[0] ?? "highlight", input.targetBand?.min ?? 2);
   if (!process.env.OPENAI_API_KEY) return fallback;
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const prompt = `You are SmartTutor's Grade-6 K12 geometry tutor.\nReturn strict JSON only.\nTopic scope: Triangles up to Pythagoras.\nNo trig, no formal proofs, no surds/irrational roots.\nUse concept_id=${input.conceptId}, grade=${input.grade}.\nAllowed interaction types: ${input.allowedInteractionTypes.join(",")}.\nTarget band: ${JSON.stringify(input.targetBand ?? null)}. Target direction: ${input.targetDirection ?? "null"}.\nSchema keys required: schema_version,question_id,concept_id,grade,interaction_type,difficulty_metadata,diagram_spec,prompt,response_contract,hint,explanation,real_world_connection.`;
+  const conceptContractText = buildConceptContractText(input);
+  const prompt = `You are SmartTutor's Grade-6 K12 geometry tutor.\nReturn strict JSON only.\nTopic scope: Triangles up to Pythagoras.\nNo trig, no formal proofs, no surds/irrational roots.\nUse concept_id=${input.conceptId}, grade=${input.grade}.\nAllowed interaction types: ${input.allowedInteractionTypes.join(",")}.\nTarget band: ${JSON.stringify(input.targetBand ?? null)}. Target direction: ${input.targetDirection ?? "null"}.\n${conceptContractText}\nSchema keys required: schema_version,question_id,concept_id,grade,interaction_type,difficulty_metadata,diagram_spec,prompt,response_contract,hint,explanation,real_world_connection.`;
 
   try {
     const response = await client.responses.create({
@@ -129,6 +425,27 @@ export async function generateWithLLM(input: {
     }
     return fallback;
   }
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .slice(-8);
+}
+
+function promptTemplateHash(prompt: string): string {
+  const normalized = prompt
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  return createHash("sha256").update(normalized).digest("hex").slice(0, 16);
+}
+
+function expectedAnswerKey(spec: QuestionSpec): string {
+  return `${spec.response_contract.answer.kind}:${spec.response_contract.answer.value}`.toLowerCase().trim();
 }
 
 export async function rateWithLLM(questionSpec: QuestionSpec, grade: number): Promise<DifficultyRating> {

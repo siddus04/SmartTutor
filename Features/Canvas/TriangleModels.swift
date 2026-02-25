@@ -20,6 +20,7 @@ struct TriangleBase: Codable {
     let interactionType: String?
     let responseMode: String?
     let promptText: String?
+    let responseContract: ResponseContract?
 
     enum CodingKeys: String, CodingKey {
         case tutorMessages = "tutor_messages"
@@ -31,6 +32,7 @@ struct TriangleBase: Codable {
         case interactionType = "interaction_type"
         case responseMode = "response_mode"
         case promptText = "prompt_text"
+        case responseContract = "response_contract"
     }
 
     init(
@@ -42,7 +44,8 @@ struct TriangleBase: Codable {
         intent: String? = nil,
         interactionType: String? = nil,
         responseMode: String? = nil,
-        promptText: String? = nil
+        promptText: String? = nil,
+        responseContract: ResponseContract? = nil
     ) {
         self.tutorMessages = tutorMessages
         self.diagramSpec = diagramSpec
@@ -53,6 +56,7 @@ struct TriangleBase: Codable {
         self.interactionType = interactionType
         self.responseMode = responseMode
         self.promptText = promptText
+        self.responseContract = responseContract
     }
 }
 

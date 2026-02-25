@@ -16,6 +16,8 @@ struct CanvasSandboxView: View {
     @State private var latestBase: TriangleBase?
     @State private var canvasResetID = UUID()
     @State private var selectedSegment: String?
+    @State private var selectedChoiceId: String?
+    @State private var numericSubmissionValue: String = ""
     @State private var messages: [ChatMessage] = []
     @State private var selectionDebugInfo: SelectionDebugInfo?
     @StateObject private var canvasController = CanvasController()
@@ -295,7 +297,8 @@ struct CanvasSandboxView: View {
             messages.append(ChatMessage(text: "No question to check yet.", isAssistant: true))
             return
         }
-        if canvasController.canvasView == nil {
+        let responseMode = base.responseMode ?? base.interactionType ?? "highlight"
+        if responseMode == "highlight" && canvasController.canvasView == nil {
             messages.append(ChatMessage(text: "No question to check yet.", isAssistant: true))
             return
         }
@@ -325,13 +328,16 @@ struct CanvasSandboxView: View {
             let result = envelope.result
             await streamAssistantMessage(result.studentFeedback)
 
+            let expected = base.answer?.value ?? "AB"
+            let responseMode = base.responseMode ?? base.interactionType ?? "highlight"
+            let isVisualMode = responseMode == "highlight"
+            let isCorrect = isSubmissionCorrect(base: base, result: result)
+
             if let detected = result.detectedSegment, result.ambiguityScore < 0.6 {
-                let expected = base.answer?.value ?? "AB"
-                let isCorrect = normalizeSegmentLabel(detected) == normalizeSegmentLabel(expected)
                 let followUp = isCorrect ? "✅ Correct" : "❌ Try again"
                 await MainActor.run {
                     messages.append(ChatMessage(text: followUp, isAssistant: true))
-                    if !isCorrect {
+                    if !isCorrect && isVisualMode {
                         canvasController.clear()
                         selectedSegment = nil
                     }
@@ -342,9 +348,10 @@ struct CanvasSandboxView: View {
             } else {
                 await MainActor.run {
                     messages.append(ChatMessage(text: "I can’t tell which side you circled—try circling just ONE side clearly.", isAssistant: true))
-                    canvasController.clear()
-                    selectedSegment = nil
-                    let expected = base.answer?.value ?? "AB"
+                    if isVisualMode {
+                        canvasController.clear()
+                        selectedSegment = nil
+                    }
                     updateMasteryAfterCheck(expected: expected, detected: result.detectedSegment, ambiguity: result.ambiguityScore)
                 }
             }
@@ -363,8 +370,50 @@ struct CanvasSandboxView: View {
         }
     }
 
+    private func isSubmissionCorrect(base: TriangleBase, result: TriangleAICheckResult) -> Bool {
+        let responseMode = base.responseMode ?? base.interactionType ?? "highlight"
+        switch responseMode {
+        case "multiple_choice":
+            return result.detectedSegment == base.answer?.value
+        case "numeric_input":
+            guard
+                let expectedText = base.answer?.value,
+                let expected = Double(expectedText),
+                let submittedText = result.detectedSegment,
+                let submitted = Double(submittedText)
+            else { return false }
+            let tolerance = base.responseContract?.numericRule?.tolerance ?? 0
+            return abs(submitted - expected) <= abs(tolerance)
+        default:
+            return normalizeSegmentLabel(result.detectedSegment) == normalizeSegmentLabel(base.answer?.value ?? "AB")
+        }
+    }
+
     private func runAICheck(base: TriangleBase) async -> TriangleAIChecker.ResultEnvelope? {
 #if os(iOS)
+        let checker = TriangleAIChecker()
+        let responseMode = base.responseMode ?? base.interactionType ?? "highlight"
+        let expectedValue = base.answer?.value ?? "AB"
+        let submittedChoiceId = responseMode == "multiple_choice" ? selectedChoiceId : nil
+        let submittedNumericValue = responseMode == "numeric_input" ? numericSubmissionValue : nil
+        let numericTolerance = base.responseContract?.numericRule?.tolerance
+
+        if responseMode != "highlight" {
+            return await checker.check(
+                conceptId: base.conceptId ?? "tri.basics.identify_right_triangle",
+                promptText: base.promptText ?? base.tutorMessages.first?.text ?? "",
+                interactionType: base.interactionType ?? responseMode,
+                responseMode: responseMode,
+                rightAngleAt: base.diagramSpec?.rightAngleAt,
+                expectedAnswerValue: expectedValue,
+                submittedChoiceId: submittedChoiceId,
+                submittedNumericValue: submittedNumericValue,
+                numericTolerance: numericTolerance,
+                combinedPNGBase64: "",
+                mergedImagePath: nil
+            )
+        }
+
         guard let canvasView = canvasController.canvasView else {
             print("[AICheck] Warning: canvas view unavailable")
             return nil
@@ -434,21 +483,20 @@ struct CanvasSandboxView: View {
             return nil
         }
         appendLog("Payload mime=\(encoded.mime) bytes=\(encoded.byteCount)")
-        let combinedBase64 = encoded.base64
 
-        let checker = TriangleAIChecker()
-        let expectedSegment = base.answer?.value ?? "AB"
-        let envelope = await checker.check(
+        return await checker.check(
             conceptId: base.conceptId ?? "tri.basics.identify_right_triangle",
             promptText: base.promptText ?? base.tutorMessages.first?.text ?? "",
             interactionType: base.interactionType ?? "highlight",
-            responseMode: base.responseMode ?? "highlight",
+            responseMode: responseMode,
             rightAngleAt: base.diagramSpec?.rightAngleAt,
-            expectedAnswerValue: expectedSegment,
-            combinedPNGBase64: combinedBase64,
+            expectedAnswerValue: expectedValue,
+            submittedChoiceId: submittedChoiceId,
+            submittedNumericValue: submittedNumericValue,
+            numericTolerance: numericTolerance,
+            combinedPNGBase64: encoded.base64,
             mergedImagePath: combinedPath
         )
-        return envelope
 #else
         print("[AICheck] Warning: AI check unsupported on this platform")
         return nil
