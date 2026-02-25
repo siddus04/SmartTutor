@@ -262,6 +262,10 @@
   - Clean-cut schema migration to `m3.question_spec.v2` with `response_contract`.
   - Add mode-specific validation rails for highlight/multiple_choice/numeric_input.
   - Keep current canvas runtime constrained to highlight interaction until M4 UI modes are implemented.
+- M3.1d:
+  - Add per-concept contract table in backend LLM generator (objective, answer kinds, interaction types, phrasing bans, variation minimums).
+  - Inject selected concept contract into the `generateWithLLM` prompt before OpenAI call.
+  - Require question-family rotation across repeated attempts (diagram labeling/statement validation/scenario-based/etc.).
 
 **Files touched:**
 - `App/AppConfig.swift`
@@ -281,6 +285,7 @@
 3. Validate `expected=BC` and AI `detected=CB` is graded as correct after canonical normalization.
 4. Force malformed v2 payload (`response_contract` mismatch) and confirm deterministic validator rejection before render.
 5. Confirm app still operates in highlight mode only (M3 scope), with schema v2 accepted end-to-end.
+6. For the same concept+difficulty over multiple attempts, verify prompt logs/specs show varied question family and no prohibited generic phrasing.
 
 **Acceptance criteria:**
 - Dynamic question generation path is active by default in app runtime.
