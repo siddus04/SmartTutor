@@ -457,3 +457,18 @@
   3. Answer incorrectly once; verify difficulty decreases and remediation is logged/selected next.
   4. Open hamburger menu and run **Run Mastery Simulator**; verify logs show scripted deterministic transitions and progression updates.
   5. Continue attempts until completion and verify completion message is displayed deterministically.
+
+**Implementation notes (2026-02-25, logging observability for generate/check/rate pipeline):**
+- Files touched:
+  - `Features/Canvas/TriangleAPI.swift`
+  - `Features/Canvas/TriangleAIChecker.swift`
+  - `Features/Canvas/CanvasSandboxView.swift`
+  - `backend/app/api/triangles/generate/route.ts`
+  - `backend/app/api/triangles/check/route.ts`
+  - `backend/app/api/triangles/rate/route.ts`
+- Manual test steps:
+  1. Generate a new question and verify client logs include full `/api/triangles/generate` request payload (concept, grade, target band/direction, allowed interaction types) and response JSON.
+  2. Submit a highlighted answer and verify client logs include `/api/triangles/check` request payload with `merged_image_path` and redacted base64 length.
+  3. Confirm server logs include check request metadata (hash/length/path), raw LLM detect output, raw LLM feedback output, and final response JSON.
+  4. Trigger rating flow and verify client + server logs include `/api/triangles/rate` request and response summaries.
+  5. Intentionally cause malformed payload in local testing and verify validation/error logs clearly identify failure stage and reasons.

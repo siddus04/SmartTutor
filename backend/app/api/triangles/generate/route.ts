@@ -20,6 +20,7 @@ export async function POST(request: Request) {
       target_band?: { min?: number; max?: number };
       target_direction?: string;
       allowed_interaction_types?: string[];
+      learner_context?: Record<string, unknown>;
     };
 
     const conceptId = body.concept_id ?? "tri.structure.hypotenuse";
@@ -28,6 +29,15 @@ export async function POST(request: Request) {
     const targetBand = body.target_band?.min != null && body.target_band?.max != null
       ? { min: body.target_band.min, max: body.target_band.max }
       : undefined;
+
+    console.log("[API][Generate][Request]", JSON.stringify({
+      concept_id: conceptId,
+      grade,
+      target_band: targetBand ?? null,
+      target_direction: body.target_direction ?? null,
+      allowed_interaction_types: allowed,
+      learner_context: body.learner_context ?? {}
+    }));
 
     const questionSpec = await generateWithLLM({
       conceptId,
@@ -39,11 +49,21 @@ export async function POST(request: Request) {
 
     const errors = validateQuestionSpec(questionSpec, allowed);
     if (errors.length > 0) {
+      console.log("[API][Generate][ValidationFailed]", JSON.stringify({ concept_id: conceptId, reasons: errors }));
       return jsonResponse({ error: "invalid_question_spec", reasons: errors }, 422);
     }
 
+    console.log("[API][Generate][Response]", JSON.stringify({
+      question_id: questionSpec.question_id,
+      concept_id: questionSpec.concept_id,
+      interaction_type: questionSpec.interaction_type,
+      difficulty: questionSpec.difficulty_metadata?.generator_self_rating,
+      response_mode: questionSpec.response_contract?.mode
+    }));
+
     return jsonResponse({ question_spec: questionSpec }, 200);
-  } catch {
+  } catch (error: unknown) {
+    console.error("[API][Generate][Error]", error);
     return jsonResponse({ error: "generation_failed" }, 500);
   }
 }

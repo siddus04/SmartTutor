@@ -445,7 +445,8 @@ struct CanvasSandboxView: View {
             responseMode: base.responseMode ?? "highlight",
             rightAngleAt: base.diagramSpec?.rightAngleAt,
             expectedAnswerValue: expectedSegment,
-            combinedPNGBase64: combinedBase64
+            combinedPNGBase64: combinedBase64,
+            mergedImagePath: combinedPath
         )
         return envelope
 #else

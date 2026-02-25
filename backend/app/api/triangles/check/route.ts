@@ -108,6 +108,7 @@ export async function POST(request: Request) {
     interaction_type?: string;
     response_mode?: string;
     right_angle_at?: "A" | "B" | "C" | null;
+    merged_image_path?: string;
     combined_png_base64?: string;
     expected_answer_value?: string;
   };
@@ -123,13 +124,23 @@ export async function POST(request: Request) {
   const interactionType = body.interaction_type ?? "highlight";
   const responseMode = body.response_mode ?? interactionType;
   const rightAngleAt = body.right_angle_at ?? null;
+  const mergedImagePath = body.merged_image_path ?? null;
   const combinedBase64 = body.combined_png_base64 ?? "";
   const expectedAnswerValue = body.expected_answer_value ?? "AB";
 
   const header = `Concept: ${conceptId}\nPrompt: ${promptText}\nInteractionType: ${interactionType}\nResponseMode: ${responseMode}\nRightAngleAt: ${rightAngleAt ?? "null"}`;
   const fullPrompt = `${header}\n\n${PROMPT}`;
   const imageHash = crypto.createHash("sha256").update(combinedBase64).digest("hex").slice(0, 12);
-  console.log(`AI check request hash=${imageHash}`);
+  console.log("[API][Check][Request]", JSON.stringify({
+    concept_id: conceptId,
+    interaction_type: interactionType,
+    response_mode: responseMode,
+    right_angle_at: rightAngleAt,
+    merged_image_path: mergedImagePath,
+    expected_answer_value: expectedAnswerValue,
+    combined_png_base64_length: combinedBase64.length,
+    combined_png_sha256_prefix: imageHash
+  }));
 
   try {
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -151,8 +162,10 @@ export async function POST(request: Request) {
     });
 
     const detectText = detectResponse.output_text || "";
+    console.log("[API][Check][LLMDetectRaw]", detectText);
     const parsed = safeParseJson(detectText);
     if (!parsed) {
+      console.log("[API][Check][LLMDetectParseFailed]");
       return jsonResponse(ERROR_AI_FAILED, 200);
     }
 
@@ -162,6 +175,8 @@ export async function POST(request: Request) {
       ...validated,
       student_feedback: feedback
     };
+
+    console.log("[API][Check][Response]", JSON.stringify(finalResponse));
 
     return jsonResponse(finalResponse, 200);
   } catch (err: unknown) {
@@ -261,6 +276,7 @@ async function generateFeedback(
     });
 
     const text = response.output_text || "";
+    console.log("[API][Check][LLMFeedbackRaw]", text);
     const parsed = safeParseJson(text);
     if (parsed && typeof parsed.student_feedback === "string") {
       return parsed.student_feedback;

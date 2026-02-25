@@ -30,7 +30,8 @@ final class TriangleAIChecker {
         responseMode: String,
         rightAngleAt: String?,
         expectedAnswerValue: String,
-        combinedPNGBase64: String
+        combinedPNGBase64: String,
+        mergedImagePath: String?
     ) async -> ResultEnvelope {
         guard let url = URL(string: AppConfig.aiCheckBaseURL + "api/triangles/check") else {
             return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: nil, didFallback: true)
@@ -48,20 +49,54 @@ final class TriangleAIChecker {
             "interaction_type": interactionType,
             "response_mode": responseMode,
             "right_angle_at": rightAngleAt,
+            "merged_image_path": mergedImagePath,
             "combined_png_base64": combinedPNGBase64,
             "expected_answer_value": expectedAnswerValue
         ]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: payload, options: [])
+        let requestData = try? JSONSerialization.data(withJSONObject: payload, options: [])
+        request.httpBody = requestData
+        logRequest(url: url, payload: payload, requestData: requestData)
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             let statusCode = (response as? HTTPURLResponse)?.statusCode
+            logResponse(statusCode: statusCode, responseData: data)
             if let decoded = try? JSONDecoder().decode(TriangleAICheckResult.self, from: data) {
                 return ResultEnvelope(result: decoded, statusCode: statusCode, didFallback: false)
             }
             return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: statusCode, didFallback: true)
         } catch {
             return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: nil, didFallback: true)
+        }
+    }
+
+    private func logRequest(url: URL, payload: [String: Any?], requestData: Data?) {
+        let safePayload: [String: Any] = payload.reduce(into: [:]) { partial, pair in
+            if pair.key == "combined_png_base64" {
+                partial[pair.key] = "<base64-redacted len=\((pair.value as? String)?.count ?? 0)>"
+                return
+            }
+            partial[pair.key] = pair.value ?? NSNull()
+        }
+        print("[AICheck][Request] url=\(url.absoluteString)")
+        if
+            let data = try? JSONSerialization.data(withJSONObject: safePayload, options: [.prettyPrinted, .sortedKeys]),
+            let text = String(data: data, encoding: .utf8) {
+            print("[AICheck][Request] payload=\n\(text)")
+        } else if let requestData {
+            print("[AICheck][Request] payload=<unformatted bytes=\(requestData.count)>")
+        }
+    }
+
+    private func logResponse(statusCode: Int?, responseData: Data) {
+        print("[AICheck][Response] status=\(statusCode.map(String.init) ?? "nil") bytes=\(responseData.count)")
+        if
+            let object = try? JSONSerialization.jsonObject(with: responseData),
+            let prettyData = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
+            let text = String(data: prettyData, encoding: .utf8) {
+            print("[AICheck][Response] json=\n\(text)")
+        } else if let raw = String(data: responseData, encoding: .utf8) {
+            print("[AICheck][Response] raw=\(raw)")
         }
     }
 
