@@ -472,3 +472,14 @@
   3. Confirm server logs include check request metadata (hash/length/path), raw LLM detect output, raw LLM feedback output, and final response JSON.
   4. Trigger rating flow and verify client + server logs include `/api/triangles/rate` request and response summaries.
   5. Intentionally cause malformed payload in local testing and verify validation/error logs clearly identify failure stage and reasons.
+
+**Implementation notes (2026-02-26, M3 learner-context novelty gating):**
+- Files touched:
+  - `Features/Canvas/TriangleAPI.swift`
+  - `backend/app/api/triangles/generate/route.ts`
+  - `backend/app/lib/m3.ts`
+- Manual test steps:
+  1. Trigger multiple `/api/triangles/generate` calls and verify request payload includes `learner_context.recent_concept_ids`, `recent_prompt_hashes`, `recent_interaction_types`, and `recent_expected_answers`.
+  2. Submit a generated question request with a `recent_prompt_hashes` entry matching the new prompt template hash and verify API validation returns `422` with `novelty_violation`.
+  3. Submit a generated question request where `recent_expected_answers` repeats the same answer target at/above the configured limit and verify API validation returns `422` with `novelty_violation`.
+  4. Submit a generate request with mixed allowed interaction types and a learner context that already used one type; verify LLM prompt logs prioritize unseen interaction types first.
