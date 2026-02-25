@@ -17,6 +17,21 @@ final class InteractionPolicyTests: XCTestCase {
         XCTAssertEqual(allowedModes, ["multiple_choice"])
     }
 
+
+    func testDifficultyTargetUsesToleranceBand() {
+        let target = DifficultyTarget.from(intent: .practice, difficulty: 3)
+        XCTAssertEqual(target.band?.lowerBound, 2)
+        XCTAssertEqual(target.band?.upperBound, 4)
+    }
+
+    func testStubProviderVariesPromptByConceptFamily() async throws {
+        let provider = StubQuestionProvider()
+        let structure = try await provider.generateQuestion(conceptId: "tri.structure.hypotenuse", difficulty: 2, intent: .practice)
+        let pyth = try await provider.generateQuestion(conceptId: "tri.pyth.solve_missing_side", difficulty: 2, intent: .practice)
+
+        XCTAssertNotEqual(structure.base.promptText, pyth.base.promptText)
+    }
+
     func testGenerateQuestionPassesConceptPolicyModesToAPI() async throws {
         let apiClient = CapturingTriangleAPIClient()
         let fallbackProvider = MockFallbackQuestionProvider()
