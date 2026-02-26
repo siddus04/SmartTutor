@@ -409,6 +409,7 @@ struct CanvasSandboxView: View {
                 submittedChoiceId: submittedChoiceId,
                 submittedNumericValue: submittedNumericValue,
                 numericTolerance: numericTolerance,
+                assessmentContract: base.assessmentContract,
                 combinedPNGBase64: "",
                 mergedImagePath: nil
             )
@@ -494,6 +495,7 @@ struct CanvasSandboxView: View {
             submittedChoiceId: submittedChoiceId,
             submittedNumericValue: submittedNumericValue,
             numericTolerance: numericTolerance,
+            assessmentContract: base.assessmentContract,
             combinedPNGBase64: encoded.base64,
             mergedImagePath: combinedPath
         )

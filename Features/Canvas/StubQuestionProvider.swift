@@ -35,7 +35,8 @@ struct StubQuestionProvider: TriangleQuestionProviding {
                 interactionType: interactionType,
                 responseMode: interactionType,
                 promptText: template.prompt,
-                responseContract: responseContract(for: interactionType, answer: template.answer)
+                responseContract: responseContract(for: interactionType, answer: template.answer),
+                assessmentContract: assessmentContract(for: conceptId, interactionType: interactionType)
             )
         )
     }
@@ -105,6 +106,36 @@ struct StubQuestionProvider: TriangleQuestionProviding {
         )
     }
 
+
+    private func assessmentContract(for conceptId: String, interactionType: String) -> AssessmentContract {
+        let objectiveType: String
+        if conceptId == "tri.basics.identify_right_angle" {
+            objectiveType = interactionType == "multiple_choice" ? "identify_right_angle_option" : "identify_right_angle_target"
+        } else if conceptId.hasPrefix("tri.pyth.") {
+            objectiveType = interactionType == "numeric_input" ? "solve_pythagorean_numeric" : "select_pythagorean_relation"
+        } else {
+            objectiveType = interactionType == "highlight" ? "highlight_triangle_target" : "select_triangle_statement"
+        }
+
+        let answerSchema: String
+        switch interactionType {
+        case "highlight":
+            answerSchema = "visual_target"
+        case "numeric_input":
+            answerSchema = "numeric_value"
+        default:
+            answerSchema = "option_id"
+        }
+
+        let strategyId = interactionType == "highlight" ? "vision_locator" : (interactionType == "numeric_input" ? "numeric_rule" : "deterministic_choice")
+
+        return AssessmentContract(
+            objectiveType: objectiveType,
+            answerSchema: answerSchema,
+            gradingStrategyId: strategyId,
+            feedbackPolicyId: "triangles_grade6_guided_feedback"
+        )
+    }
     private func responseContract(for interactionType: String, answer: String) -> ResponseContract {
         switch interactionType {
         case "highlight":

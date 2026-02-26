@@ -125,6 +125,22 @@
   4. Use canvas Reset toolbar button; verify `sessionStore.resetSession()` returns to onboarding deterministically.
   5. In canvas, load a question and run check-answer flow; verify tutor + grading interactions still work.
 
+
+**Implementation notes (2026-02-26 — Grading V2 Task 1: shared assessment contract schema):**
+- Files touched:
+  - `Features/Canvas/TriangleModels.swift`
+  - `Features/Canvas/ValidatedLLMQuestionProvider.swift`
+  - `Features/Canvas/StubQuestionProvider.swift`
+  - `Features/Canvas/TriangleAIChecker.swift`
+  - `Features/Canvas/CanvasSandboxView.swift`
+  - `backend/app/lib/m3.ts`
+  - `backend/app/api/triangles/check/route.ts`
+- Manual test steps:
+  1. Generate a question through the app (stub and LLM mode) and verify payload/model decode includes `assessment_contract` without crashes.
+  2. Trigger **Check Answer** on highlight, multiple-choice, and numeric questions; verify request logs include `assessment_contract`.
+  3. Force a malformed generated question missing `assessment_contract`; verify backend validation rejects it deterministically.
+  4. Verify fallback question generation still succeeds and now carries `assessment_contract` metadata.
+
 ### M2 — Curriculum Graph + Mastery Engine (Deterministic Rails)
 **Goal:** Implement concept progression and mastery as one integrated deterministic system.
 

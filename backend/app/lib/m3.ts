@@ -21,6 +21,12 @@ export type QuestionSpec = {
     options?: Array<{ id: string; text: string }>;
     numeric_rule?: { tolerance?: number };
   };
+  assessment_contract?: {
+    objective_type: string;
+    answer_schema: string;
+    grading_strategy_id: string;
+    feedback_policy_id: string;
+  };
   hint: string;
   explanation: string;
   real_world_connection: string;
@@ -335,6 +341,15 @@ export function validateQuestionSpec(spec: QuestionSpec, allowedInteractionTypes
   }
   if (spec.interaction_type === "numeric_input" && (spec.response_contract.answer.kind !== "number" || Number.isNaN(Number(spec.response_contract.answer.value)))) errors.push("answer_mismatch");
   if (spec.interaction_type === "highlight" && !(spec.response_contract.answer.kind === "point_set" || spec.response_contract.answer.kind === "segment")) errors.push("answer_mismatch");
+
+  if (!spec.assessment_contract) {
+    errors.push("assessment_contract_missing");
+  } else {
+    if (!spec.assessment_contract.objective_type || !spec.assessment_contract.answer_schema || !spec.assessment_contract.grading_strategy_id || !spec.assessment_contract.feedback_policy_id) {
+      errors.push("assessment_contract_invalid");
+    }
+  }
+
   errors.push(...validateConceptSemantics(spec));
   return errors;
 }
@@ -418,7 +433,7 @@ export async function generateWithLLM(input: {
   if (!process.env.OPENAI_API_KEY) return fallback;
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const conceptContractText = buildConceptContractText(input);
-  const prompt = `You are SmartTutor's Grade-6 K12 geometry tutor.\nReturn strict JSON only.\nTopic scope: Triangles up to Pythagoras.\nNo trig, no formal proofs, no surds/irrational roots.\nUse concept_id=${input.conceptId}, grade=${input.grade}.\nAllowed interaction types: ${input.allowedInteractionTypes.join(",")}.\nTarget band: ${JSON.stringify(input.targetBand ?? null)}. Target direction: ${input.targetDirection ?? "null"}.\n${conceptContractText}\nSchema keys required: schema_version,question_id,question_family,concept_id,grade,interaction_type,difficulty_metadata,diagram_spec,prompt,response_contract,hint,explanation,real_world_connection.`;
+  const prompt = `You are SmartTutor's Grade-6 K12 geometry tutor.\nReturn strict JSON only.\nTopic scope: Triangles up to Pythagoras.\nNo trig, no formal proofs, no surds/irrational roots.\nUse concept_id=${input.conceptId}, grade=${input.grade}.\nAllowed interaction types: ${input.allowedInteractionTypes.join(",")}.\nTarget band: ${JSON.stringify(input.targetBand ?? null)}. Target direction: ${input.targetDirection ?? "null"}.\n${conceptContractText}\nSchema keys required: schema_version,question_id,question_family,concept_id,grade,interaction_type,difficulty_metadata,diagram_spec,prompt,response_contract,assessment_contract,hint,explanation,real_world_connection.`;
 
   try {
     const response = await client.responses.create({
@@ -721,6 +736,15 @@ function makeFallbackSpec(conceptId: string, interactionType: string, difficulty
     realWorld = "Carpenters and firefighters use this triangle model in real situations.";
   }
 
+  const assessmentContract = {
+    objective_type: conceptId.startsWith("tri.pyth.")
+      ? (safeType === "numeric_input" ? "solve_pythagorean_numeric" : "select_pythagorean_relation")
+      : (safeType === "highlight" ? "highlight_triangle_target" : "select_triangle_statement"),
+    answer_schema: safeType === "multiple_choice" ? "option_id" : safeType === "numeric_input" ? "numeric_value" : "visual_target",
+    grading_strategy_id: safeType === "highlight" ? "vision_locator" : safeType === "numeric_input" ? "numeric_rule" : "deterministic_choice",
+    feedback_policy_id: "triangles_grade6_guided_feedback"
+  };
+
   return {
     schema_version: "m3.question_spec.v2",
     question_id: `fallback.${conceptId}.${Date.now()}`,
@@ -748,6 +772,7 @@ function makeFallbackSpec(conceptId: string, interactionType: string, difficulty
       options,
       numeric_rule: safeType === "numeric_input" ? { tolerance: 0 } : undefined
     },
+    assessment_contract: assessmentContract,
     hint,
     explanation,
     real_world_connection: realWorld

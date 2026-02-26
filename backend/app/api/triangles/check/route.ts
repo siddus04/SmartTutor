@@ -114,6 +114,12 @@ export async function POST(request: Request) {
         tolerance?: number;
       };
     };
+    assessment_contract?: {
+      objective_type?: string;
+      answer_schema?: string;
+      grading_strategy_id?: string;
+      feedback_policy_id?: string;
+    };
   };
 
   try {
@@ -133,8 +139,9 @@ export async function POST(request: Request) {
   const submittedChoiceId = body.submitted_choice_id ?? null;
   const submittedNumericValue = body.submitted_numeric_value ?? null;
   const numericTolerance = body.response_contract?.numeric_rule?.tolerance;
+  const assessmentContract = body.assessment_contract ?? null;
 
-  const header = `Concept: ${conceptId}\nPrompt: ${promptText}\nInteractionType: ${interactionType}\nResponseMode: ${responseMode}\nRightAngleAt: ${rightAngleAt ?? "null"}`;
+  const header = `Concept: ${conceptId}\nPrompt: ${promptText}\nInteractionType: ${interactionType}\nResponseMode: ${responseMode}\nRightAngleAt: ${rightAngleAt ?? "null"}\nObjectiveType: ${assessmentContract?.objective_type ?? "null"}\nAnswerSchema: ${assessmentContract?.answer_schema ?? "null"}`;
   const fullPrompt = `${header}\n\n${PROMPT}`;
   const imageHash = crypto.createHash("sha256").update(combinedBase64).digest("hex").slice(0, 12);
   console.log("[API][Check][Request]", JSON.stringify({
@@ -147,6 +154,7 @@ export async function POST(request: Request) {
     submitted_choice_id: submittedChoiceId,
     submitted_numeric_value: submittedNumericValue,
     numeric_tolerance: numericTolerance ?? null,
+    assessment_contract: assessmentContract,
     combined_png_base64_length: combinedBase64.length,
     combined_png_sha256_prefix: imageHash
   }));
