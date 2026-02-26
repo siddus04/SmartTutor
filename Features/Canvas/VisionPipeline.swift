@@ -164,9 +164,10 @@ struct VisionPipeline {
         canvasView: PKCanvasView,
         background: UIImage?,
         prompt: String,
-        config: VisionRequestConfig = VisionRequestConfig(),
+        config: VisionRequestConfig? = nil,
         submit: @escaping (String, String) async -> VisionResult?
     ) async -> VisionResult {
+        let effectiveConfig = config ?? VisionRequestConfig()
         let submission = renderSubmissionImage(canvasView: canvasView, background: background)
         let flattened = flattenOnWhite(submission)
 
@@ -182,19 +183,19 @@ struct VisionPipeline {
         }
 
         var imageForVision = flattened
-        if config.enableCropping {
+        if effectiveConfig.enableCropping {
             imageForVision = cropToContentBounds(
                 imageForVision,
-                paddingPct: config.paddingPct,
-                minSize: config.minCropSize,
+                paddingPct: effectiveConfig.paddingPct,
+                minSize: effectiveConfig.minCropSize,
                 inkDrawing: canvasView.drawing,
                 canvasSize: canvasView.bounds.size,
-                minKeepAreaFraction: config.minKeepAreaFraction
+                minKeepAreaFraction: effectiveConfig.minKeepAreaFraction
             )
         }
 
-        imageForVision = resizeForVision(imageForVision, longEdge: config.longEdge)
-        guard let encoded = encodeForAPIPayload(imageForVision, maxPNGBytes: config.maxPNGBytes, jpegQuality: config.jpegFallbackQuality) else {
+        imageForVision = resizeForVision(imageForVision, longEdge: effectiveConfig.longEdge)
+        guard let encoded = encodeForAPIPayload(imageForVision, maxPNGBytes: effectiveConfig.maxPNGBytes, jpegQuality: effectiveConfig.jpegFallbackQuality) else {
             return VisionResult(
                 detectedSegment: nil,
                 ambiguityScore: 1.0,
@@ -375,7 +376,8 @@ struct VisionPipeline {
     static func resizeForVision(_ image: AnyObject, longEdge: CGFloat = 1200) -> AnyObject { image }
     static func encodeForAPIPayload(_ image: AnyObject, maxPNGBytes: Int = 1_800_000, jpegQuality: CGFloat = 0.85) -> (mime: String, base64: String, byteCount: Int)? { nil }
     static func shouldCallVision(inkDrawing: AnyObject?, renderedImage: AnyObject) -> VisionGateResult { VisionGateResult(ok: false, reasons: ["UNSUPPORTED_PLATFORM"]) }
-    static func prepareAndSubmitVisionRequest(canvasView: AnyObject, background: AnyObject?, prompt: String, config: VisionRequestConfig = VisionRequestConfig(), submit: @escaping (String, String) async -> VisionResult?) async -> VisionResult {
+    static func prepareAndSubmitVisionRequest(canvasView: AnyObject, background: AnyObject?, prompt: String, config: VisionRequestConfig? = nil, submit: @escaping (String, String) async -> VisionResult?) async -> VisionResult {
+        _ = config
         VisionResult(detectedSegment: nil, ambiguityScore: 1.0, confidence: 0.0, reasonCodes: ["UNSUPPORTED_PLATFORM"], studentFeedback: "Vision is not supported on this platform.")
     }
 }
