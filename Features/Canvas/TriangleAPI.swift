@@ -257,10 +257,10 @@ private actor LearnerContextStore {
     }
 
     private func normalizedExpectedAnswer(from questionSpec: QuestionSpec) -> String {
-        let normalizedKind = questionSpec.responseContract.answer.kind
+        let normalizedKind = questionSpec.assessmentContract.expectedAnswer.kind
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedValue = questionSpec.responseContract.answer.value
+        let normalizedValue = questionSpec.assessmentContract.expectedAnswer.value
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return "\(normalizedKind):\(normalizedValue)"

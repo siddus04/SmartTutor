@@ -143,10 +143,11 @@ enum TriangleAdapter {
                 conceptId: spec.conceptId,
                 difficulty: ratedDifficulty,
                 intent: intent.rawValue,
-                interactionType: spec.interactionType,
-                responseMode: spec.responseContract.mode,
+                interactionType: spec.assessmentContract.interactionType,
+                responseMode: spec.assessmentContract.interactionType,
                 promptText: spec.prompt,
-                responseContract: spec.responseContract
+                assessmentContract: spec.assessmentContract,
+                responseContract: ResponseContract(mode: spec.assessmentContract.interactionType, answer: spec.assessmentContract.expectedAnswer, options: spec.assessmentContract.options, numericRule: spec.assessmentContract.numericRule)
             )
         )
     }
@@ -254,18 +255,28 @@ enum QuestionSpecValidator {
 
         guard triangleArea(from: question.diagramSpec.pointsNormalized) > 0.001 else { throw ValidationError.renderability }
 
-        guard question.responseContract.mode == question.interactionType else { throw ValidationError.answerMismatch }
+        guard question.assessmentContract.schemaVersion == "m3.assessment_contract.v1" else { throw ValidationError.schema }
+        guard question.assessmentContract.conceptId == question.conceptId else { throw ValidationError.answerMismatch }
+        guard question.assessmentContract.interactionType == question.interactionType else { throw ValidationError.answerMismatch }
+        guard question.responseContract.mode == question.assessmentContract.interactionType else { throw ValidationError.answerMismatch }
+        guard question.assessmentContract.expectedAnswer.kind == question.responseContract.answer.kind && question.assessmentContract.expectedAnswer.value == question.responseContract.answer.value else { throw ValidationError.answerMismatch }
 
         switch question.interactionType {
         case "highlight":
-            guard question.responseContract.answer.kind == "point_set" || question.responseContract.answer.kind == "segment" else { throw ValidationError.answerMismatch }
+            guard question.assessmentContract.answerSchema == "point_set" || question.assessmentContract.answerSchema == "segment_set" else { throw ValidationError.answerMismatch }
+            guard question.assessmentContract.gradingStrategyId == "vision_locator" || question.assessmentContract.gradingStrategyId == "hybrid" else { throw ValidationError.answerMismatch }
+            guard question.assessmentContract.expectedAnswer.kind == "point_set" || question.assessmentContract.expectedAnswer.kind == "segment" else { throw ValidationError.answerMismatch }
         case "multiple_choice":
-            guard question.responseContract.answer.kind == "option_id" else { throw ValidationError.answerMismatch }
-            guard let options = question.responseContract.options, options.count >= 2 else { throw ValidationError.answerMismatch }
-            guard options.contains(where: { $0.id == question.responseContract.answer.value }) else { throw ValidationError.answerMismatch }
+            guard question.assessmentContract.answerSchema == "enum" else { throw ValidationError.answerMismatch }
+            guard question.assessmentContract.gradingStrategyId == "deterministic_rule" else { throw ValidationError.answerMismatch }
+            guard question.assessmentContract.expectedAnswer.kind == "option_id" else { throw ValidationError.answerMismatch }
+            guard let options = question.assessmentContract.options, options.count >= 2 else { throw ValidationError.answerMismatch }
+            guard options.contains(where: { $0.id == question.assessmentContract.expectedAnswer.value }) else { throw ValidationError.answerMismatch }
         case "numeric_input":
-            guard question.responseContract.answer.kind == "number" else { throw ValidationError.answerMismatch }
-            guard Double(question.responseContract.answer.value) != nil else { throw ValidationError.answerMismatch }
+            guard question.assessmentContract.answerSchema == "numeric_with_tolerance" else { throw ValidationError.answerMismatch }
+            guard question.assessmentContract.gradingStrategyId == "deterministic_rule" else { throw ValidationError.answerMismatch }
+            guard question.assessmentContract.expectedAnswer.kind == "number" else { throw ValidationError.answerMismatch }
+            guard Double(question.assessmentContract.expectedAnswer.value) != nil else { throw ValidationError.answerMismatch }
         default:
             throw ValidationError.interaction
         }
@@ -299,7 +310,7 @@ enum QuestionSpecValidator {
             question.hint,
             question.explanation,
             question.realWorldConnection,
-            question.responseContract.answer.value,
+            question.assessmentContract.expectedAnswer.value,
             optionsText
         ].joined(separator: " "))
     }

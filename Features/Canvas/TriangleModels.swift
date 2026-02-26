@@ -20,6 +20,7 @@ struct TriangleBase: Codable {
     let interactionType: String?
     let responseMode: String?
     let promptText: String?
+    let assessmentContract: AssessmentContract?
     let responseContract: ResponseContract?
 
     enum CodingKeys: String, CodingKey {
@@ -32,6 +33,7 @@ struct TriangleBase: Codable {
         case interactionType = "interaction_type"
         case responseMode = "response_mode"
         case promptText = "prompt_text"
+        case assessmentContract = "assessment_contract"
         case responseContract = "response_contract"
     }
 
@@ -45,6 +47,7 @@ struct TriangleBase: Codable {
         interactionType: String? = nil,
         responseMode: String? = nil,
         promptText: String? = nil,
+        assessmentContract: AssessmentContract? = nil,
         responseContract: ResponseContract? = nil
     ) {
         self.tutorMessages = tutorMessages
@@ -56,6 +59,7 @@ struct TriangleBase: Codable {
         self.interactionType = interactionType
         self.responseMode = responseMode
         self.promptText = promptText
+        self.assessmentContract = assessmentContract
         self.responseContract = responseContract
     }
 }
@@ -117,6 +121,7 @@ struct QuestionSpec: Codable {
     let difficultyMetadata: DifficultyMetadata
     let diagramSpec: DiagramSpec
     let prompt: String
+    let assessmentContract: AssessmentContract
     let responseContract: ResponseContract
     let hint: String
     let explanation: String
@@ -132,10 +137,37 @@ struct QuestionSpec: Codable {
         case difficultyMetadata = "difficulty_metadata"
         case diagramSpec = "diagram_spec"
         case prompt
+        case assessmentContract = "assessment_contract"
         case responseContract = "response_contract"
         case hint
         case explanation
         case realWorldConnection = "real_world_connection"
+    }
+}
+
+struct AssessmentContract: Codable {
+    let schemaVersion: String
+    let conceptId: String
+    let interactionType: String
+    let objectiveType: String
+    let answerSchema: String
+    let gradingStrategyId: String
+    let feedbackPolicyId: String
+    let expectedAnswer: SpecAnswer
+    let options: [ResponseOption]?
+    let numericRule: NumericRule?
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case conceptId = "concept_id"
+        case interactionType = "interaction_type"
+        case objectiveType = "objective_type"
+        case answerSchema = "answer_schema"
+        case gradingStrategyId = "grading_strategy_id"
+        case feedbackPolicyId = "feedback_policy_id"
+        case expectedAnswer = "expected_answer"
+        case options
+        case numericRule = "numeric_rule"
     }
 }
 

@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       concept_id: questionSpec.concept_id,
       interaction_type: questionSpec.interaction_type,
       difficulty: questionSpec.difficulty_metadata?.generator_self_rating,
-      response_mode: questionSpec.response_contract?.mode
+      response_mode: questionSpec.assessment_contract?.interaction_type
     }));
 
     return jsonResponse({ question_spec: questionSpec }, 200);
