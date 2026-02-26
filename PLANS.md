@@ -550,3 +550,14 @@
   1. Open project in Xcode and verify `Features/Canvas/InteractionPolicy.swift` appears under the Canvas group with SmartTutor target membership.
   2. Build SmartTutor target and verify `ValidatedLLMQuestionProvider.swift` compiles without `Cannot find 'InteractionPolicy' in scope`.
   3. Run `scripts/check_xcodeproj_sources.sh` and verify the script reports success for file-reference and sources-build-phase coverage.
+
+**Implementation notes (2026-02-26 — Backend central grading router + concept policy registry):**
+- Files touched:
+  - `backend/app/lib/gradingRouter.ts` (new)
+  - `backend/app/api/triangles/check/route.ts`
+  - `PLANS.md`
+- Manual test steps:
+  1. POST `/api/triangles/check` with `assessment_contract.grading_strategy_id="deterministic_rule"` + `answer_schema="enum"` and verify router selects `deterministic_choice` with normalized `grading_result` envelope.
+  2. POST `/api/triangles/check` with numeric payload + `numeric_rule` (`tolerance`, optional range/unit) and verify `grading_result.detected_answer.kind="number"`, correctness, and evidence summary values.
+  3. POST `/api/triangles/check` for `concept_id="tri.pyth.equation_a2_b2_c2"` and verify concept-policy fallback order prefers `symbolic_equivalence` then `deterministic_choice` then `rubric_llm`.
+  4. POST `/api/triangles/check` with highlight payload and image to verify `visual_target_locator` strategy returns normalized envelope and legacy compatibility fields.

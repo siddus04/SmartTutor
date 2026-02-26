@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import crypto from "crypto";
+import { GradingResultEnvelope, gradeWithRouter } from "../../../lib/gradingRouter";
 
 const PROMPT = `You are SmartTutor’s AI geometry checker.
 
@@ -75,22 +76,6 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization"
 };
 
-const ERROR_MISCONFIGURED = {
-  detected_segment: null,
-  ambiguity_score: 1,
-  confidence: 0,
-  reason_codes: ["OTHER"],
-  student_feedback: "Server misconfigured (missing API key)."
-};
-
-const ERROR_AI_FAILED = {
-  detected_segment: null,
-  ambiguity_score: 1,
-  confidence: 0,
-  reason_codes: ["OTHER"],
-  student_feedback: "(AI check failed) Please try again."
-};
-
 export const runtime = "nodejs";
 
 export async function OPTIONS() {
@@ -109,6 +94,8 @@ export async function POST(request: Request) {
     expected_answer_value?: string;
     submitted_choice_id?: string;
     submitted_numeric_value?: string;
+    submitted_expression?: string;
+    submitted_text?: string;
     assessment_contract?: {
       schema_version?: string;
       concept_id?: string;
@@ -124,6 +111,9 @@ export async function POST(request: Request) {
       options?: Array<{ id?: string; text?: string }>;
       numeric_rule?: {
         tolerance?: number;
+        min_value?: number;
+        max_value?: number;
+        unit?: string;
       };
     };
   };
@@ -131,7 +121,7 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return jsonResponse(ERROR_AI_FAILED, 200);
+    return jsonResponse(errorEnvelope("INVALID_REQUEST_BODY", "Request body is not valid JSON."), 400);
   }
 
   const conceptId = body.concept_id ?? "";
@@ -142,12 +132,8 @@ export async function POST(request: Request) {
   const mergedImagePath = body.merged_image_path ?? null;
   const combinedBase64 = body.combined_png_base64 ?? "";
   const expectedAnswerValue = body.assessment_contract?.expected_answer?.value ?? body.expected_answer_value ?? "AB";
-  const submittedChoiceId = body.submitted_choice_id ?? null;
-  const submittedNumericValue = body.submitted_numeric_value ?? null;
-  const numericTolerance = body.assessment_contract?.numeric_rule?.tolerance;
+  const expectedAnswerKind = body.assessment_contract?.expected_answer?.kind ?? null;
 
-  const header = `Concept: ${conceptId}\nPrompt: ${promptText}\nInteractionType: ${interactionType}\nResponseMode: ${responseMode}\nRightAngleAt: ${rightAngleAt ?? "null"}`;
-  const fullPrompt = `${header}\n\n${PROMPT}`;
   const imageHash = crypto.createHash("sha256").update(combinedBase64).digest("hex").slice(0, 12);
   console.log("[API][Check][Request]", JSON.stringify({
     concept_id: conceptId,
@@ -156,34 +142,93 @@ export async function POST(request: Request) {
     right_angle_at: rightAngleAt,
     merged_image_path: mergedImagePath,
     expected_answer_value: expectedAnswerValue,
-    submitted_choice_id: submittedChoiceId,
-    submitted_numeric_value: submittedNumericValue,
+    submitted_choice_id: body.submitted_choice_id ?? null,
+    submitted_numeric_value: body.submitted_numeric_value ?? null,
+    submitted_expression: body.submitted_expression ?? null,
     objective_type: body.assessment_contract?.objective_type ?? null,
     answer_schema: body.assessment_contract?.answer_schema ?? null,
     grading_strategy_id: body.assessment_contract?.grading_strategy_id ?? null,
     feedback_policy_id: body.assessment_contract?.feedback_policy_id ?? null,
-    numeric_tolerance: numericTolerance ?? null,
+    numeric_rule: body.assessment_contract?.numeric_rule ?? null,
     combined_png_base64_length: combinedBase64.length,
     combined_png_sha256_prefix: imageHash
   }));
 
-  if (responseMode === "multiple_choice") {
-    const deterministic = evaluateMultipleChoice(submittedChoiceId, expectedAnswerValue);
-    console.log("[API][Check][Deterministic][MultipleChoice]", JSON.stringify(deterministic));
-    return jsonResponse(deterministic, 200);
+  const gradingEnvelope = await gradeWithRouter({
+    concept_id: conceptId,
+    grading_strategy_id: body.assessment_contract?.grading_strategy_id,
+    answer_schema: body.assessment_contract?.answer_schema,
+    expected_answer_kind: expectedAnswerKind,
+    expected_answer_value: expectedAnswerValue,
+    submitted_choice_id: body.submitted_choice_id,
+    submitted_numeric_value: body.submitted_numeric_value,
+    submitted_expression: body.submitted_expression,
+    submitted_text: body.submitted_text,
+    numeric_rule: body.assessment_contract?.numeric_rule,
+    visual_target_evaluator: async () => evaluateVisualTarget({
+      conceptId,
+      promptText,
+      interactionType,
+      responseMode,
+      rightAngleAt,
+      combinedBase64,
+      expectedAnswerValue
+    }),
+    rubric_evaluator: async () => evaluateRubricLLM({
+      submittedText: body.submitted_text,
+      expectedAnswerValue
+    })
+  });
+
+  const response = toLegacyResponse(gradingEnvelope, expectedAnswerValue);
+  console.log("[API][Check][Response]", JSON.stringify(response));
+  return jsonResponse(response, 200);
+}
+
+function toLegacyResponse(envelope: GradingResultEnvelope, expectedAnswer: string) {
+  const detected = envelope.detected_answer.value == null ? null : String(envelope.detected_answer.value);
+  const correctness = envelope.correctness === "correct";
+  return {
+    detected_segment: detected,
+    ambiguity_score: envelope.correctness === "ambiguous" ? 1 : 0,
+    confidence: envelope.confidence,
+    reason_codes: envelope.ambiguity_codes,
+    student_feedback: buildStudentFeedback(envelope, expectedAnswer),
+    grading_result: envelope,
+    correctness
+  };
+}
+
+function buildStudentFeedback(envelope: GradingResultEnvelope, expectedAnswer: string) {
+  if (envelope.correctness === "correct") {
+    return "Great work—your answer matches what the question expects.";
   }
 
-  if (responseMode === "numeric_input") {
-    const deterministic = evaluateNumericInput(submittedNumericValue, expectedAnswerValue, numericTolerance);
-    console.log("[API][Check][Deterministic][NumericInput]", JSON.stringify(deterministic));
-    return jsonResponse(deterministic, 200);
+  if (envelope.correctness === "ambiguous") {
+    return "I couldn't confidently read your answer yet. Please submit one clear answer.";
   }
 
+  const detected = envelope.detected_answer.value == null ? "(none)" : String(envelope.detected_answer.value);
+  return `Your answer '${detected}' did not match expected '${expectedAnswer}'. ${envelope.evidence_summary}`;
+}
+
+async function evaluateVisualTarget(input: {
+  conceptId: string;
+  promptText: string;
+  interactionType: string;
+  responseMode: string;
+  rightAngleAt: "A" | "B" | "C" | null;
+  combinedBase64: string;
+  expectedAnswerValue: string;
+}): Promise<GradingResultEnvelope> {
   if (!process.env.OPENAI_API_KEY) {
-    return jsonResponse(ERROR_MISCONFIGURED, 500);
+    return errorEnvelope("MISSING_OPENAI_API_KEY", "Server misconfigured (missing API key).", "visual_target_locator");
   }
 
   try {
+    const header = `Concept: ${input.conceptId}\nPrompt: ${input.promptText}\nInteractionType: ${input.interactionType}\nResponseMode: ${input.responseMode}\nRightAngleAt: ${input.rightAngleAt ?? "null"}`;
+    const fullPrompt = `${header}\n\n${PROMPT}`;
+
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const detectResponse = await client.responses.create({
       model: "gpt-4.1",
@@ -194,7 +239,7 @@ export async function POST(request: Request) {
             { type: "input_text", text: fullPrompt },
             {
               type: "input_image",
-              image_url: `data:image/png;base64,${combinedBase64}`,
+              image_url: `data:image/png;base64,${input.combinedBase64}`,
               detail: "high"
             }
           ]
@@ -202,31 +247,83 @@ export async function POST(request: Request) {
       ]
     });
 
-    const detectText = detectResponse.output_text || "";
-    console.log("[API][Check][LLMDetectRaw]", detectText);
-    const parsed = safeParseJson(detectText);
+    const parsed = safeParseJson(detectResponse.output_text || "");
     if (!parsed) {
-      console.log("[API][Check][LLMDetectParseFailed]");
-      return jsonResponse(ERROR_AI_FAILED, 200);
+      return errorEnvelope("VISION_PARSE_FAILED", "Vision model returned invalid JSON.", "visual_target_locator");
     }
 
-    const validated = validateResponse(parsed, expectedAnswerValue);
-    const feedback = await generateFeedback(client, validated, expectedAnswerValue, promptText);
-    const finalResponse = {
-      ...validated,
-      student_feedback: feedback
+    const detected = normalizeSegment(parsed?.detected_segment ?? null);
+    const ambiguity = typeof parsed?.ambiguity_score === "number" ? parsed.ambiguity_score : 1;
+    const confidence = typeof parsed?.confidence === "number" ? parsed.confidence : 0;
+    const reasonCodes = Array.isArray(parsed?.reason_codes) ? parsed.reason_codes : [];
+    const expected = normalizeSegment(input.expectedAnswerValue);
+
+    const correctness = ambiguity >= 0.6
+      ? "ambiguous"
+      : detected && expected && detected === expected
+        ? "correct"
+        : "incorrect";
+
+    const feedback = await generateFeedback(client, {
+      detected_segment: detected,
+      ambiguity_score: ambiguity
+    }, input.expectedAnswerValue, input.promptText);
+
+    return {
+      strategy_family: "visual_target_locator",
+      detected_answer: { kind: "segment", value: detected },
+      correctness,
+      confidence,
+      ambiguity_codes: reasonCodes,
+      evidence_summary: `visual_detection=${detected ?? "null"}; expected=${expected ?? "null"}; llm_feedback=${feedback}`
     };
-
-    console.log("[API][Check][Response]", JSON.stringify(finalResponse));
-
-    return jsonResponse(finalResponse, 200);
-  } catch (err: unknown) {
-    console.error("OpenAI error:", err);
-    if (err && typeof err === "object" && "response" in err) {
-      console.error("OpenAI error response:", (err as { response?: unknown }).response);
-    }
-    return jsonResponse(ERROR_AI_FAILED, 200);
+  } catch (error) {
+    console.error("[API][Check][VisualTargetError]", error);
+    return errorEnvelope("VISION_GRADING_FAILED", "Visual grading failed.", "visual_target_locator");
   }
+}
+
+async function evaluateRubricLLM(input: {
+  submittedText?: string;
+  expectedAnswerValue: string;
+}): Promise<GradingResultEnvelope> {
+  const text = input.submittedText?.trim() ?? "";
+  if (!text) {
+    return {
+      strategy_family: "rubric_llm",
+      detected_answer: { kind: "text", value: null },
+      correctness: "ambiguous",
+      confidence: 0,
+      ambiguity_codes: ["MISSING_TEXT_RESPONSE"],
+      evidence_summary: "Rubric grading requires short-text input, but none was provided."
+    };
+  }
+
+  const expected = input.expectedAnswerValue.toLowerCase();
+  const normalized = text.toLowerCase();
+  const hasExpectedSignal = normalized.includes(expected.replace(/\s+/g, "")) || normalized.includes(expected);
+
+  return {
+    strategy_family: "rubric_llm",
+    detected_answer: { kind: "text", value: text },
+    correctness: hasExpectedSignal ? "correct" : "incorrect",
+    confidence: hasExpectedSignal ? 0.75 : 0.55,
+    ambiguity_codes: [],
+    evidence_summary: hasExpectedSignal
+      ? "Strict rubric keyword match passed against expected answer signal."
+      : "Strict rubric keyword match did not find expected answer signal."
+  };
+}
+
+function errorEnvelope(code: string, summary: string, strategy_family: GradingResultEnvelope["strategy_family"] = "rubric_llm"): GradingResultEnvelope {
+  return {
+    strategy_family,
+    detected_answer: { kind: "unknown", value: null },
+    correctness: "error",
+    confidence: 0,
+    ambiguity_codes: [code],
+    evidence_summary: summary
+  };
 }
 
 function safeParseJson(text: string) {
@@ -246,112 +343,6 @@ function normalizeSegment(value: string | null | undefined): string | null {
   if (sorted === "AC") return "CA";
   if (sorted === "BC") return "BC";
   return cleaned;
-}
-
-function validateResponse(parsed: any, expected: string) {
-  const detected: string | null = parsed?.detected_segment ?? null;
-  const ambiguity = typeof parsed?.ambiguity_score === "number" ? parsed.ambiguity_score : 1;
-  const confidence = typeof parsed?.confidence === "number" ? parsed.confidence : 0;
-  const reasonCodes = Array.isArray(parsed?.reason_codes) ? parsed.reason_codes : ["OTHER"];
-
-  let finalDetected = normalizeSegment(detected);
-  const normalizedExpected = normalizeSegment(expected);
-  let overridden = false;
-
-  if (ambiguity >= 0.6) {
-    finalDetected = null;
-  }
-
-  if (finalDetected && !["AB", "BC", "CA"].includes(finalDetected)) {
-    finalDetected = null;
-  }
-
-  console.log(`expected=${normalizedExpected ?? expected} ai_detected=${finalDetected ?? "null"} amb=${ambiguity} conf=${confidence} overridden_feedback=${overridden}`);
-
-  return {
-    detected_segment: finalDetected,
-    ambiguity_score: ambiguity,
-    confidence,
-    reason_codes: reasonCodes,
-    student_feedback: ""
-  };
-}
-
-function evaluateMultipleChoice(submittedChoiceId: string | null, expected: string) {
-  const normalizedExpected = normalizeChoiceId(expected);
-  const normalizedChoice = normalizeChoiceId(submittedChoiceId);
-
-  if (!normalizedChoice) {
-    return {
-      detected_segment: null,
-      ambiguity_score: 1,
-      confidence: 0,
-      reason_codes: ["NO_CHOICE_SUBMITTED"],
-      student_feedback: "Please pick one option before checking your answer."
-    };
-  }
-
-  const isCorrect = normalizedExpected != null && normalizedChoice === normalizedExpected;
-  return {
-    detected_segment: normalizedChoice,
-    ambiguity_score: 0,
-    confidence: 1,
-    reason_codes: [],
-    student_feedback: isCorrect
-      ? "Great choice—you picked the correct option."
-      : `You picked ${normalizedChoice}. That option is not correct for this question. Try again and use the hint.`
-  };
-}
-
-function evaluateNumericInput(submittedNumericValue: string | null, expected: string, tolerance: number | undefined) {
-  const parsedSubmitted = parseNumber(submittedNumericValue);
-  if (parsedSubmitted == null) {
-    return {
-      detected_segment: null,
-      ambiguity_score: 1,
-      confidence: 0,
-      reason_codes: ["INVALID_NUMERIC_INPUT"],
-      student_feedback: "Please enter a valid number before checking your answer."
-    };
-  }
-
-  const parsedExpected = parseNumber(expected);
-  if (parsedExpected == null) {
-    return {
-      detected_segment: null,
-      ambiguity_score: 1,
-      confidence: 0,
-      reason_codes: ["OTHER"],
-      student_feedback: "This question is missing a valid numeric answer key."
-    };
-  }
-
-  const appliedTolerance = typeof tolerance === "number" && Number.isFinite(tolerance) ? Math.abs(tolerance) : 0;
-  const difference = Math.abs(parsedSubmitted - parsedExpected);
-  const isCorrect = difference <= appliedTolerance;
-
-  return {
-    detected_segment: String(parsedSubmitted),
-    ambiguity_score: 0,
-    confidence: 1,
-    reason_codes: [],
-    student_feedback: isCorrect
-      ? "Nice work—your numeric answer is within the allowed tolerance."
-      : `Your answer ${parsedSubmitted} is not within ±${appliedTolerance} of the expected value. Try again.`
-  };
-}
-
-function normalizeChoiceId(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const cleaned = value.trim();
-  return cleaned.length > 0 ? cleaned : null;
-}
-
-function parseNumber(value: string | null | undefined): number | null {
-  if (!value) return null;
-  const parsed = Number(value.trim());
-  if (!Number.isFinite(parsed)) return null;
-  return parsed;
 }
 
 function jsonResponse(payload: unknown, status: number) {
@@ -393,9 +384,7 @@ async function generateFeedback(
       ]
     });
 
-    const text = response.output_text || "";
-    console.log("[API][Check][LLMFeedbackRaw]", text);
-    const parsed = safeParseJson(text);
+    const parsed = safeParseJson(response.output_text || "");
     if (parsed && typeof parsed.student_feedback === "string") {
       return parsed.student_feedback;
     }
