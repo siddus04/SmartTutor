@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { createHash } from "crypto";
+import { DIAGRAM_TARGET_CLASSES } from "./diagramTargets";
 
 export type QuestionSpec = {
   schema_version: "m3.question_spec.v2";
@@ -453,7 +454,7 @@ export async function generateWithLLM(input: {
   if (!process.env.OPENAI_API_KEY) return fallback;
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const conceptContractText = buildConceptContractText(input);
-  const prompt = `You are SmartTutor's Grade-6 K12 geometry tutor.\nReturn strict JSON only.\nTopic scope: Triangles up to Pythagoras.\nNo trig, no formal proofs, no surds/irrational roots.\nUse concept_id=${input.conceptId}, grade=${input.grade}.\nAllowed interaction types: ${input.allowedInteractionTypes.join(",")}.\nTarget band: ${JSON.stringify(input.targetBand ?? null)}. Target direction: ${input.targetDirection ?? "null"}.\n${conceptContractText}\nSchema keys required: schema_version,question_id,question_family,concept_id,grade,interaction_type,difficulty_metadata,diagram_spec,prompt,assessment_contract,response_contract,hint,explanation,real_world_connection.`;
+  const prompt = `You are SmartTutor's Grade-6 K12 geometry tutor.\nReturn strict JSON only.\nTopic scope: Triangles up to Pythagoras.\nNo trig, no formal proofs, no surds/irrational roots.\nUse concept_id=${input.conceptId}, grade=${input.grade}.\nAllowed interaction types: ${input.allowedInteractionTypes.join(",")}.\nDiagram target taxonomy for highlight interactions: ${DIAGRAM_TARGET_CLASSES.join(",")}.\nTarget band: ${JSON.stringify(input.targetBand ?? null)}. Target direction: ${input.targetDirection ?? "null"}.\n${conceptContractText}\nSchema keys required: schema_version,question_id,question_family,concept_id,grade,interaction_type,difficulty_metadata,diagram_spec,prompt,assessment_contract,response_contract,hint,explanation,real_world_connection.`;
 
   try {
     const response = await client.responses.create({

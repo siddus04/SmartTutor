@@ -60,6 +60,18 @@ export type GradeRouterInput = {
   rubric_evaluator?: () => Promise<GradingResultEnvelope>;
 };
 
+type InterpretedEvidence = {
+  selected_option_id: string | null;
+  parsed_number: number | null;
+  parsed_equation: string;
+  parsed_text: string;
+};
+
+type EvaluationContext = {
+  input: GradeRouterInput;
+  evidence: InterpretedEvidence;
+};
+
 function clampConfidence(value: number) {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(1, value));
@@ -90,6 +102,15 @@ function canonicalizeExpression(value: string | null | undefined): string {
   return `${canonicalSide(left)}=${canonicalSide(right)}`;
 }
 
+function interpretEvidence(input: GradeRouterInput): InterpretedEvidence {
+  return {
+    selected_option_id: normalizeChoiceId(input.submitted_choice_id),
+    parsed_number: parseNumeric(input.submitted_numeric_value),
+    parsed_equation: input.submitted_expression?.trim() ?? "",
+    parsed_text: input.submitted_text?.trim() ?? ""
+  };
+}
+
 function mapToStrategyFamily(gradingStrategyId?: string | null, answerSchema?: string | null): StrategyFamily {
   const strategy = gradingStrategyId?.trim().toLowerCase();
   const schema = answerSchema?.trim().toLowerCase();
@@ -112,9 +133,9 @@ function mapToStrategyFamily(gradingStrategyId?: string | null, answerSchema?: s
   return "rubric_llm";
 }
 
-function evaluateDeterministicChoice(input: GradeRouterInput): GradingResultEnvelope {
-  const expected = normalizeChoiceId(input.expected_answer_value);
-  const submitted = normalizeChoiceId(input.submitted_choice_id);
+function evaluateDeterministicChoice(context: EvaluationContext): GradingResultEnvelope {
+  const expected = normalizeChoiceId(context.input.expected_answer_value);
+  const submitted = context.evidence.selected_option_id;
 
   if (!submitted) {
     return {
@@ -140,14 +161,14 @@ function evaluateDeterministicChoice(input: GradeRouterInput): GradingResultEnve
   };
 }
 
-function evaluateNumericRule(input: GradeRouterInput): GradingResultEnvelope {
-  const submitted = parseNumeric(input.submitted_numeric_value);
-  const expected = parseNumeric(input.expected_answer_value);
+function evaluateNumericRule(context: EvaluationContext): GradingResultEnvelope {
+  const submitted = context.evidence.parsed_number;
+  const expected = parseNumeric(context.input.expected_answer_value);
 
   if (submitted == null) {
     return {
       strategy_family: "numeric_rule",
-      detected_answer: { kind: "number", value: null, unit: input.numeric_rule?.unit },
+      detected_answer: { kind: "number", value: null, unit: context.input.numeric_rule?.unit },
       correctness: "ambiguous",
       confidence: 0,
       ambiguity_codes: ["INVALID_NUMERIC_INPUT"],
@@ -158,7 +179,7 @@ function evaluateNumericRule(input: GradeRouterInput): GradingResultEnvelope {
   if (expected == null) {
     return {
       strategy_family: "numeric_rule",
-      detected_answer: { kind: "number", value: submitted, unit: input.numeric_rule?.unit },
+      detected_answer: { kind: "number", value: submitted, unit: context.input.numeric_rule?.unit },
       correctness: "error",
       confidence: 0,
       ambiguity_codes: ["MISSING_EXPECTED_NUMERIC_RULE"],
@@ -166,16 +187,16 @@ function evaluateNumericRule(input: GradeRouterInput): GradingResultEnvelope {
     };
   }
 
-  const tolerance = Math.abs(input.numeric_rule?.tolerance ?? 0);
-  const inRange = (input.numeric_rule?.min_value == null || submitted >= input.numeric_rule.min_value)
-    && (input.numeric_rule?.max_value == null || submitted <= input.numeric_rule.max_value);
+  const tolerance = Math.abs(context.input.numeric_rule?.tolerance ?? 0);
+  const inRange = (context.input.numeric_rule?.min_value == null || submitted >= context.input.numeric_rule.min_value)
+    && (context.input.numeric_rule?.max_value == null || submitted <= context.input.numeric_rule.max_value);
   const delta = Math.abs(submitted - expected);
   const correctByTolerance = delta <= tolerance;
   const isCorrect = inRange && correctByTolerance;
 
   return {
     strategy_family: "numeric_rule",
-    detected_answer: { kind: "number", value: submitted, unit: input.numeric_rule?.unit },
+    detected_answer: { kind: "number", value: submitted, unit: context.input.numeric_rule?.unit },
     correctness: isCorrect ? "correct" : "incorrect",
     confidence: 1,
     ambiguity_codes: inRange ? [] : ["NUMERIC_OUTSIDE_ALLOWED_RANGE"],
@@ -183,9 +204,9 @@ function evaluateNumericRule(input: GradeRouterInput): GradingResultEnvelope {
   };
 }
 
-function evaluateSymbolicEquivalence(input: GradeRouterInput): GradingResultEnvelope {
-  const submitted = input.submitted_expression?.trim() ?? "";
-  const expected = input.expected_answer_value?.trim() ?? "";
+function evaluateSymbolicEquivalence(context: EvaluationContext): GradingResultEnvelope {
+  const submitted = context.evidence.parsed_equation;
+  const expected = context.input.expected_answer_value?.trim() ?? "";
   if (!submitted) {
     return {
       strategy_family: "symbolic_equivalence",
@@ -216,6 +237,7 @@ function getPolicy(conceptId: string): ConceptPolicy {
 }
 
 export async function gradeWithRouter(input: GradeRouterInput): Promise<GradingResultEnvelope> {
+  const evidence = interpretEvidence(input);
   const inferred = mapToStrategyFamily(input.grading_strategy_id, input.answer_schema);
   const policy = getPolicy(input.concept_id);
   const candidateOrder = [inferred, ...policy.fallback_order.filter((strategy) => strategy !== inferred)];
@@ -223,9 +245,10 @@ export async function gradeWithRouter(input: GradeRouterInput): Promise<GradingR
   for (const strategy of candidateOrder) {
     if (!policy.acceptable_strategies.includes(strategy)) continue;
 
-    if (strategy === "deterministic_choice") return evaluateDeterministicChoice(input);
-    if (strategy === "numeric_rule") return evaluateNumericRule(input);
-    if (strategy === "symbolic_equivalence") return evaluateSymbolicEquivalence(input);
+    const context: EvaluationContext = { input, evidence };
+    if (strategy === "deterministic_choice") return evaluateDeterministicChoice(context);
+    if (strategy === "numeric_rule") return evaluateNumericRule(context);
+    if (strategy === "symbolic_equivalence") return evaluateSymbolicEquivalence(context);
     if (strategy === "visual_target_locator" && input.visual_target_evaluator) return input.visual_target_evaluator();
     if (strategy === "rubric_llm" && input.rubric_evaluator) return input.rubric_evaluator();
   }

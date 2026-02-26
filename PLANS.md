@@ -561,3 +561,17 @@
   2. POST `/api/triangles/check` with numeric payload + `numeric_rule` (`tolerance`, optional range/unit) and verify `grading_result.detected_answer.kind="number"`, correctness, and evidence summary values.
   3. POST `/api/triangles/check` for `concept_id="tri.pyth.equation_a2_b2_c2"` and verify concept-policy fallback order prefers `symbolic_equivalence` then `deterministic_choice` then `rubric_llm`.
   4. POST `/api/triangles/check` with highlight payload and image to verify `visual_target_locator` strategy returns normalized envelope and legacy compatibility fields.
+
+**Implementation notes (2026-02-26 — Two-stage grading interpretation/evaluation + shared diagram target taxonomy):**
+- Files touched:
+  - `backend/app/lib/gradingRouter.ts`
+  - `backend/app/lib/diagramTargets.ts` (new)
+  - `backend/app/api/triangles/check/route.ts`
+  - `backend/app/lib/m3.ts`
+  - `PLANS.md`
+- Manual test steps:
+  1. POST `/api/triangles/check` with `assessment_contract.grading_strategy_id="deterministic_rule"`, `answer_schema="enum"`, and `submitted_choice_id`; verify grading uses interpretation stage (`selected_option_id`) and deterministic evaluation result envelope remains stable.
+  2. POST `/api/triangles/check` with numeric payload + tolerance; verify interpretation stage parses `submitted_numeric_value` and evaluation stage applies tolerance/range contract checks.
+  3. POST `/api/triangles/check` with symbolic expression input and `answer_schema="expression_equivalence"`; verify interpretation stage parses equation string and evaluation stage canonicalizes before compare.
+  4. POST `/api/triangles/check` with highlight payload where vision returns `detected_target_class` for each class (`vertices`, `segments`, `angles`, `enclosed_regions`, `symbolic_marks`) and verify normalized class labels flow through detection + grading evidence summary.
+  5. Call `/api/triangles/generate` and inspect prompt construction logs to confirm diagram target taxonomy comes from shared `diagramTargets` definition.

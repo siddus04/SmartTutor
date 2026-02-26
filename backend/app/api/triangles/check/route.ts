@@ -1,6 +1,9 @@
 import OpenAI from "openai";
 import crypto from "crypto";
 import { GradingResultEnvelope, gradeWithRouter } from "../../../lib/gradingRouter";
+import { DIAGRAM_TARGET_CLASSES, DiagramTargetClass, normalizeDiagramTargetClass } from "../../../lib/diagramTargets";
+
+const DIAGRAM_TARGET_LABELS = DIAGRAM_TARGET_CLASSES.join(", ");
 
 const PROMPT = `You are SmartTutor’s AI geometry checker.
 
@@ -11,12 +14,13 @@ You will be given:
 Your task is to analyze the combined image and return exactly strict JSON with no extra text.
 
 Hard rules:
-- You must determine detected_segment ONLY from the ink on the image.
+- You must determine detected_target ONLY from the ink on the image.
 - Do NOT assume the student circled the correct answer.
 - Report what was circled even if incorrect.
 
 Determine:
-- "detected_segment": which side the student circled ("AB", "BC", "CA"), or null if you cannot confidently determine a single side.
+- "detected_target_class": one of [${DIAGRAM_TARGET_LABELS}] indicating what category of item the learner targeted.
+- "detected_target": the concrete target value that was highlighted/circled (for example "AB", "A", "∠ABC", "region_1"), or null if you cannot confidently determine one target.
 - "ambiguity_score": a float between 0 and 1 indicating how ambiguous the circle is (0 = very clear, 1 = completely ambiguous).
 - "confidence": a float between 0 and 1 indicating your confidence that the detected side is correct.
 - "reason_codes": an array of zero or more of these exact strings:
@@ -24,18 +28,19 @@ Determine:
 - "student_feedback": a concise feedback message appropriate for a Grade 4–6 student.
 
 Interpretation rules:
-- If there is no clear closed loop around a side, return detected_segment = null and include "NO_CLOSED_LOOP".
-- If more than one side is enclosed by the loop, return detected_segment = null and include "MULTIPLE_SIDES_ENCLOSED".
-- If the loop does not appear close to any side, include "CIRCLE_NOT_NEAR_ANY_SIDE".
+- If there is no clear closed loop around a target, return detected_target = null and include "NO_CLOSED_LOOP".
+- If more than one target is enclosed by the loop, return detected_target = null and include "MULTIPLE_SIDES_ENCLOSED".
+- If the loop does not appear close to any known target, include "CIRCLE_NOT_NEAR_ANY_SIDE".
 - If the drawing is too messy to decide, include "INK_TOO_MESSY".
 - If the triangle diagram itself is unclear or unlabeled, include "UNCLEAR_DIAGRAM".
-- Only choose a detected_segment if a single side is enclosed clearly with low ambiguity.
+- Only choose a detected_target if a single target is enclosed clearly with low ambiguity.
 - Never guess if ambiguous; return null.
 
 Output must be strictly JSON with this exact object shape and nothing else:
 
 {
-  "detected_segment": "AB" | "BC" | "CA" | null,
+  "detected_target_class": "vertices" | "segments" | "angles" | "enclosed_regions" | "symbolic_marks" | null,
+  "detected_target": string | null,
   "ambiguity_score": number,
   "confidence": number,
   "reason_codes": [string],
@@ -45,7 +50,8 @@ Output must be strictly JSON with this exact object shape and nothing else:
 const FEEDBACK_PROMPT = `You are SmartTutor’s AI geometry tutor. You are a fun high school math teacher who helps kids remember ideas.
 
 You will be given:
-- detected_segment: which side the student circled (or null).
+- detected_target_class: what kind of diagram object was targeted.
+- detected_target: what the student circled/tapped (or null).
 - expected_answer_value: the expected answer value.
 - ambiguity_score.
 - prompt/context about the triangle.
@@ -53,13 +59,13 @@ You will be given:
 Write a single short feedback message for a Grade 4–6 student.
 
 Rules:
-- If detected_segment is null OR ambiguity_score >= 0.6: ask the student to re-circle just ONE side clearly.
-- If detected_segment is wrong:
+- If detected_target is null OR ambiguity_score >= 0.6: ask the student to re-circle just ONE target clearly.
+- If detected_target is wrong:
   - Explicitly say their choice is not correct for the current question.
-  - Mention the detected_segment (e.g., "You circled CA").
+  - Mention the detected_target (e.g., "You circled CA").
   - Provide layered hints in two short sentences aligned with the prompt/context.
   - Do NOT reveal the correct side label directly.
-- If detected_segment is correct:
+- If detected_target is correct:
   - Praise briefly.
   - Include one short memorable fact or practical application that is DIFFERENT from the wrong-answer hints (e.g., ladders, roofs, ramps).
 - Never reveal the correct side label directly if the student was wrong.
@@ -172,7 +178,8 @@ export async function POST(request: Request) {
       responseMode,
       rightAngleAt,
       combinedBase64,
-      expectedAnswerValue
+      expectedAnswerValue,
+      expectedAnswerKind
     }),
     rubric_evaluator: async () => evaluateRubricLLM({
       submittedText: body.submitted_text,
@@ -190,6 +197,7 @@ function toLegacyResponse(envelope: GradingResultEnvelope, expectedAnswer: strin
   const correctness = envelope.correctness === "correct";
   return {
     detected_segment: detected,
+    detected_target: detected,
     ambiguity_score: envelope.correctness === "ambiguous" ? 1 : 0,
     confidence: envelope.confidence,
     reason_codes: envelope.ambiguity_codes,
@@ -220,6 +228,7 @@ async function evaluateVisualTarget(input: {
   rightAngleAt: "A" | "B" | "C" | null;
   combinedBase64: string;
   expectedAnswerValue: string;
+  expectedAnswerKind: string | null;
 }): Promise<GradingResultEnvelope> {
   if (!process.env.OPENAI_API_KEY) {
     return errorEnvelope("MISSING_OPENAI_API_KEY", "Server misconfigured (missing API key).", "visual_target_locator");
@@ -252,30 +261,34 @@ async function evaluateVisualTarget(input: {
       return errorEnvelope("VISION_PARSE_FAILED", "Vision model returned invalid JSON.", "visual_target_locator");
     }
 
-    const detected = normalizeSegment(parsed?.detected_segment ?? null);
+    const detectedTargetClass = normalizeDiagramTargetClass(parsed?.detected_target_class ?? null) ?? "segments";
+    const detected = normalizeDiagramTargetValue(detectedTargetClass, parsed?.detected_target ?? null);
     const ambiguity = typeof parsed?.ambiguity_score === "number" ? parsed.ambiguity_score : 1;
     const confidence = typeof parsed?.confidence === "number" ? parsed.confidence : 0;
     const reasonCodes = Array.isArray(parsed?.reason_codes) ? parsed.reason_codes : [];
-    const expected = normalizeSegment(input.expectedAnswerValue);
+    const expectedClass = expectedDiagramTargetClass(input.expectedAnswerKind, input.expectedAnswerValue);
+    const expected = normalizeDiagramTargetValue(expectedClass, input.expectedAnswerValue);
+    const sameClass = detectedTargetClass === expectedClass;
 
     const correctness = ambiguity >= 0.6
       ? "ambiguous"
-      : detected && expected && detected === expected
+      : detected && expected && sameClass && detected === expected
         ? "correct"
         : "incorrect";
 
     const feedback = await generateFeedback(client, {
-      detected_segment: detected,
+      detected_target_class: detectedTargetClass,
+      detected_target: detected,
       ambiguity_score: ambiguity
-    }, input.expectedAnswerValue, input.promptText);
+    }, expectedClass, input.expectedAnswerValue, input.promptText);
 
     return {
       strategy_family: "visual_target_locator",
-      detected_answer: { kind: "segment", value: detected },
+      detected_answer: { kind: expectedClass === "segments" ? "segment" : "point_set", value: detected },
       correctness,
       confidence,
       ambiguity_codes: reasonCodes,
-      evidence_summary: `visual_detection=${detected ?? "null"}; expected=${expected ?? "null"}; llm_feedback=${feedback}`
+      evidence_summary: `visual_detection_class=${detectedTargetClass}; visual_detection_target=${detected ?? "null"}; expected_class=${expectedClass}; expected=${expected ?? "null"}; llm_feedback=${feedback}`
     };
   } catch (error) {
     console.error("[API][Check][VisualTargetError]", error);
@@ -345,6 +358,31 @@ function normalizeSegment(value: string | null | undefined): string | null {
   return cleaned;
 }
 
+function expectedDiagramTargetClass(expectedAnswerKind: string | null, expectedAnswerValue: string): DiagramTargetClass {
+  const normalizedKind = expectedAnswerKind?.trim().toLowerCase() ?? "";
+  if (normalizedKind === "segment") return "segments";
+  if (normalizedKind === "point_set" || normalizedKind === "vertex") return "vertices";
+  if (normalizedKind === "angle") return "angles";
+  if (normalizedKind === "region" || normalizedKind === "enclosed_region") return "enclosed_regions";
+  if (normalizedKind === "symbolic_mark") return "symbolic_marks";
+  const normalized = expectedAnswerValue.trim();
+  if (/^[ABC]$/i.test(normalized)) return "vertices";
+  if (/^[ABC]{2}$/i.test(normalized)) return "segments";
+  if (normalized.startsWith("∠") || /^angle/i.test(normalized)) return "angles";
+  if (/^region_/i.test(normalized)) return "enclosed_regions";
+  if (/^mark_/i.test(normalized)) return "symbolic_marks";
+  return "segments";
+}
+
+function normalizeDiagramTargetValue(targetClass: DiagramTargetClass, value: string | null | undefined): string | null {
+  if (!value) return null;
+  const cleaned = value.trim();
+  if (!cleaned) return null;
+  if (targetClass === "segments") return normalizeSegment(cleaned);
+  if (targetClass === "vertices") return cleaned.toUpperCase();
+  return cleaned;
+}
+
 function jsonResponse(payload: unknown, status: number) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -359,13 +397,16 @@ function jsonResponse(payload: unknown, status: number) {
 
 async function generateFeedback(
   client: OpenAI,
-  validated: { detected_segment: string | null; ambiguity_score: number },
+  validated: { detected_target_class: DiagramTargetClass; detected_target: string | null; ambiguity_score: number },
+  expectedClass: DiagramTargetClass,
   expected: string,
   promptText: string
 ) {
   try {
     const payload = {
-      detected_segment: validated.detected_segment,
+      detected_target_class: validated.detected_target_class,
+      detected_target: validated.detected_target,
+      expected_target_class: expectedClass,
       expected_answer_value: expected,
       ambiguity_score: validated.ambiguity_score,
       prompt_text: promptText
@@ -392,12 +433,12 @@ async function generateFeedback(
     console.error("OpenAI feedback error:", err);
   }
 
-  if (validated.detected_segment == null || validated.ambiguity_score >= 0.6) {
-    return "I can't tell which side you circled—try circling just ONE side clearly.";
+  if (validated.detected_target == null || validated.ambiguity_score >= 0.6) {
+    return "I can't tell which target you selected—try marking just ONE target clearly.";
   }
-  if (normalizeSegment(validated.detected_segment) !== normalizeSegment(expected)) {
-    const detected = validated.detected_segment ?? "that side";
-    return `You circled ${detected}, but that's not correct for this question. Hint 1: use the right-angle marker and labels carefully. Hint 2: match your choice to what the prompt asks.`;
+  if (validated.detected_target_class !== expectedClass || normalizeDiagramTargetValue(validated.detected_target_class, validated.detected_target) !== normalizeDiagramTargetValue(expectedClass, expected)) {
+    const detected = validated.detected_target ?? "that target";
+    return `You selected ${detected}, but that's not correct for this question. Hint 1: use the right-angle marker and labels carefully. Hint 2: match your choice to what the prompt asks.`;
   }
   return "Great work—you matched the diagram to the prompt correctly. This skill helps with maps, building plans, and design sketches.";
 }
