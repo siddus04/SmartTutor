@@ -513,11 +513,3 @@
   1. Build the app target and verify `StubQuestionProvider` resolves `InteractionPolicy` without compile errors.
   2. Trigger M3 telemetry logging path and verify the pipeline log string compiles and prints normally.
   3. Build non-iOS targets and verify `VisionPipeline` no longer emits a main-actor default-argument isolation error.
-
-**Implementation notes (2026-02-26 — non-iOS VisionPipeline return fix):**
-- Files touched:
-  - `Features/Canvas/VisionPipeline.swift`
-  - `PLANS.md`
-- Manual test steps:
-  1. Build SmartTutor on macOS/iOS and verify no non-iOS stub compile errors are emitted for `VisionPipeline.prepareAndSubmitVisionRequest`.
-  2. Compile Swift sources that include `VisionPipeline.swift` and confirm there is no “missing return” or “unused result” error in the non-iOS branch.
