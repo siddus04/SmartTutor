@@ -26,13 +26,10 @@ final class TriangleAIChecker {
     func check(
         conceptId: String,
         promptText: String,
-        interactionType: String,
-        responseMode: String,
+        assessmentContract: AssessmentContract,
         rightAngleAt: String?,
-        expectedAnswerValue: String,
         submittedChoiceId: String?,
         submittedNumericValue: String?,
-        numericTolerance: Double?,
         combinedPNGBase64: String,
         mergedImagePath: String?
     ) async -> ResultEnvelope {
@@ -46,23 +43,18 @@ final class TriangleAIChecker {
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         request.setValue("no-cache", forHTTPHeaderField: "Pragma")
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        var responseContract: [String: Any] = [:]
-        if let numericTolerance {
-            responseContract["numeric_rule"] = ["tolerance": numericTolerance]
-        }
-
         let payload: [String: Any?] = [
             "concept_id": conceptId,
             "prompt_text": promptText,
-            "interaction_type": interactionType,
-            "response_mode": responseMode,
+            "interaction_type": assessmentContract.interactionType,
+            "response_mode": assessmentContract.interactionType,
             "right_angle_at": rightAngleAt,
             "merged_image_path": mergedImagePath,
             "combined_png_base64": combinedPNGBase64,
-            "expected_answer_value": expectedAnswerValue,
+            "expected_answer_value": assessmentContract.expectedAnswer.value,
             "submitted_choice_id": submittedChoiceId,
             "submitted_numeric_value": submittedNumericValue,
-            "response_contract": responseContract.isEmpty ? nil : responseContract
+            "assessment_contract": assessmentContractDictionary(from: assessmentContract)
         ]
         let requestData = try? JSONSerialization.data(withJSONObject: payload, options: [])
         request.httpBody = requestData
@@ -81,6 +73,31 @@ final class TriangleAIChecker {
         }
     }
 
+
+    private func assessmentContractDictionary(from contract: AssessmentContract) -> [String: Any] {
+        var result: [String: Any] = [
+            "schema_version": contract.schemaVersion,
+            "concept_id": contract.conceptId,
+            "interaction_type": contract.interactionType,
+            "objective_type": contract.objectiveType,
+            "answer_schema": contract.answerSchema,
+            "grading_strategy_id": contract.gradingStrategyId,
+            "feedback_policy_id": contract.feedbackPolicyId,
+            "expected_answer": [
+                "kind": contract.expectedAnswer.kind,
+                "value": contract.expectedAnswer.value
+            ]
+        ]
+
+        if let options = contract.options {
+            result["options"] = options.map { ["id": $0.id, "text": $0.text] }
+        }
+        if let tolerance = contract.numericRule?.tolerance {
+            result["numeric_rule"] = ["tolerance": tolerance]
+        }
+
+        return result
+    }
     private func logRequest(url: URL, payload: [String: Any?], requestData: Data?) {
         let safePayload: [String: Any] = payload.reduce(into: [:]) { partial, pair in
             if pair.key == "combined_png_base64" {

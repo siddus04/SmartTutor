@@ -297,8 +297,8 @@ struct CanvasSandboxView: View {
             messages.append(ChatMessage(text: "No question to check yet.", isAssistant: true))
             return
         }
-        let responseMode = base.responseMode ?? base.interactionType ?? "highlight"
-        if responseMode == "highlight" && canvasController.canvasView == nil {
+        let interactionType = base.assessmentContract?.interactionType ?? base.responseMode ?? base.interactionType ?? "highlight"
+        if interactionType == "highlight" && canvasController.canvasView == nil {
             messages.append(ChatMessage(text: "No question to check yet.", isAssistant: true))
             return
         }
@@ -328,9 +328,9 @@ struct CanvasSandboxView: View {
             let result = envelope.result
             await streamAssistantMessage(result.studentFeedback)
 
-            let expected = base.answer?.value ?? "AB"
-            let responseMode = base.responseMode ?? base.interactionType ?? "highlight"
-            let isVisualMode = responseMode == "highlight"
+            let expected = base.assessmentContract?.expectedAnswer.value ?? base.answer?.value ?? "AB"
+            let interactionType = base.assessmentContract?.interactionType ?? base.responseMode ?? base.interactionType ?? "highlight"
+            let isVisualMode = interactionType == "highlight"
             let isCorrect = isSubmissionCorrect(base: base, result: result)
 
             if let detected = result.detectedSegment, result.ambiguityScore < 0.6 {
@@ -371,44 +371,39 @@ struct CanvasSandboxView: View {
     }
 
     private func isSubmissionCorrect(base: TriangleBase, result: TriangleAICheckResult) -> Bool {
-        let responseMode = base.responseMode ?? base.interactionType ?? "highlight"
-        switch responseMode {
+        let contract = base.assessmentContract ?? fallbackAssessmentContract(from: base)
+
+        switch contract.interactionType {
         case "multiple_choice":
-            return result.detectedSegment == base.answer?.value
+            return result.detectedSegment == contract.expectedAnswer.value
         case "numeric_input":
             guard
-                let expectedText = base.answer?.value,
-                let expected = Double(expectedText),
+                let expected = Double(contract.expectedAnswer.value),
                 let submittedText = result.detectedSegment,
                 let submitted = Double(submittedText)
             else { return false }
-            let tolerance = base.responseContract?.numericRule?.tolerance ?? 0
+            let tolerance = contract.numericRule?.tolerance ?? 0
             return abs(submitted - expected) <= abs(tolerance)
         default:
-            return normalizeSegmentLabel(result.detectedSegment) == normalizeSegmentLabel(base.answer?.value ?? "AB")
+            return normalizeSegmentLabel(result.detectedSegment) == normalizeSegmentLabel(contract.expectedAnswer.value)
         }
     }
 
     private func runAICheck(base: TriangleBase) async -> TriangleAIChecker.ResultEnvelope? {
 #if os(iOS)
         let checker = TriangleAIChecker()
-        let responseMode = base.responseMode ?? base.interactionType ?? "highlight"
-        let expectedValue = base.answer?.value ?? "AB"
-        let submittedChoiceId = responseMode == "multiple_choice" ? selectedChoiceId : nil
-        let submittedNumericValue = responseMode == "numeric_input" ? numericSubmissionValue : nil
-        let numericTolerance = base.responseContract?.numericRule?.tolerance
+        let contract = base.assessmentContract ?? fallbackAssessmentContract(from: base)
+        let submittedChoiceId = contract.interactionType == "multiple_choice" ? selectedChoiceId : nil
+        let submittedNumericValue = contract.interactionType == "numeric_input" ? numericSubmissionValue : nil
 
-        if responseMode != "highlight" {
+        if contract.interactionType != "highlight" {
             return await checker.check(
-                conceptId: base.conceptId ?? "tri.basics.identify_right_triangle",
+                conceptId: base.conceptId ?? contract.conceptId,
                 promptText: base.promptText ?? base.tutorMessages.first?.text ?? "",
-                interactionType: base.interactionType ?? responseMode,
-                responseMode: responseMode,
+                assessmentContract: contract,
                 rightAngleAt: base.diagramSpec?.rightAngleAt,
-                expectedAnswerValue: expectedValue,
                 submittedChoiceId: submittedChoiceId,
                 submittedNumericValue: submittedNumericValue,
-                numericTolerance: numericTolerance,
                 combinedPNGBase64: "",
                 mergedImagePath: nil
             )
@@ -485,15 +480,12 @@ struct CanvasSandboxView: View {
         appendLog("Payload mime=\(encoded.mime) bytes=\(encoded.byteCount)")
 
         return await checker.check(
-            conceptId: base.conceptId ?? "tri.basics.identify_right_triangle",
+            conceptId: base.conceptId ?? contract.conceptId,
             promptText: base.promptText ?? base.tutorMessages.first?.text ?? "",
-            interactionType: base.interactionType ?? "highlight",
-            responseMode: responseMode,
+            assessmentContract: contract,
             rightAngleAt: base.diagramSpec?.rightAngleAt,
-            expectedAnswerValue: expectedValue,
             submittedChoiceId: submittedChoiceId,
             submittedNumericValue: submittedNumericValue,
-            numericTolerance: numericTolerance,
             combinedPNGBase64: encoded.base64,
             mergedImagePath: combinedPath
         )
@@ -501,6 +493,42 @@ struct CanvasSandboxView: View {
         print("[AICheck] Warning: AI check unsupported on this platform")
         return nil
 #endif
+    }
+
+    private func fallbackAssessmentContract(from base: TriangleBase) -> AssessmentContract {
+        let interactionType = base.responseMode ?? base.interactionType ?? "highlight"
+        let answerValue = base.answer?.value ?? "AB"
+        let expectedKind: String
+        let answerSchema: String
+        let gradingStrategyId: String
+
+        switch interactionType {
+        case "multiple_choice":
+            expectedKind = "option_id"
+            answerSchema = "enum"
+            gradingStrategyId = "deterministic_rule"
+        case "numeric_input":
+            expectedKind = "number"
+            answerSchema = "numeric_with_tolerance"
+            gradingStrategyId = "deterministic_rule"
+        default:
+            expectedKind = "segment"
+            answerSchema = "segment_set"
+            gradingStrategyId = "vision_locator"
+        }
+
+        return AssessmentContract(
+            schemaVersion: "m3.assessment_contract.v1",
+            conceptId: base.conceptId ?? "tri.basics.identify_right_triangle",
+            interactionType: interactionType,
+            objectiveType: "classify_statement",
+            answerSchema: answerSchema,
+            gradingStrategyId: gradingStrategyId,
+            feedbackPolicyId: "hint_progressive_reveal_level_1",
+            expectedAnswer: SpecAnswer(kind: expectedKind, value: answerValue),
+            options: base.responseContract?.options,
+            numericRule: base.responseContract?.numericRule
+        )
     }
 
     private func normalizeSegmentLabel(_ value: String?) -> String? {
