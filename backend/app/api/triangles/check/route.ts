@@ -109,7 +109,19 @@ export async function POST(request: Request) {
     expected_answer_value?: string;
     submitted_choice_id?: string;
     submitted_numeric_value?: string;
-    response_contract?: {
+    assessment_contract?: {
+      schema_version?: string;
+      concept_id?: string;
+      interaction_type?: string;
+      objective_type?: string;
+      answer_schema?: string;
+      grading_strategy_id?: string;
+      feedback_policy_id?: string;
+      expected_answer?: {
+        kind?: string;
+        value?: string;
+      };
+      options?: Array<{ id?: string; text?: string }>;
       numeric_rule?: {
         tolerance?: number;
       };
@@ -125,14 +137,14 @@ export async function POST(request: Request) {
   const conceptId = body.concept_id ?? "";
   const promptText = body.prompt_text ?? "";
   const interactionType = body.interaction_type ?? "highlight";
-  const responseMode = body.response_mode ?? interactionType;
+  const responseMode = body.assessment_contract?.interaction_type ?? body.response_mode ?? interactionType;
   const rightAngleAt = body.right_angle_at ?? null;
   const mergedImagePath = body.merged_image_path ?? null;
   const combinedBase64 = body.combined_png_base64 ?? "";
-  const expectedAnswerValue = body.expected_answer_value ?? "AB";
+  const expectedAnswerValue = body.assessment_contract?.expected_answer?.value ?? body.expected_answer_value ?? "AB";
   const submittedChoiceId = body.submitted_choice_id ?? null;
   const submittedNumericValue = body.submitted_numeric_value ?? null;
-  const numericTolerance = body.response_contract?.numeric_rule?.tolerance;
+  const numericTolerance = body.assessment_contract?.numeric_rule?.tolerance;
 
   const header = `Concept: ${conceptId}\nPrompt: ${promptText}\nInteractionType: ${interactionType}\nResponseMode: ${responseMode}\nRightAngleAt: ${rightAngleAt ?? "null"}`;
   const fullPrompt = `${header}\n\n${PROMPT}`;
@@ -146,6 +158,10 @@ export async function POST(request: Request) {
     expected_answer_value: expectedAnswerValue,
     submitted_choice_id: submittedChoiceId,
     submitted_numeric_value: submittedNumericValue,
+    objective_type: body.assessment_contract?.objective_type ?? null,
+    answer_schema: body.assessment_contract?.answer_schema ?? null,
+    grading_strategy_id: body.assessment_contract?.grading_strategy_id ?? null,
+    feedback_policy_id: body.assessment_contract?.feedback_policy_id ?? null,
     numeric_tolerance: numericTolerance ?? null,
     combined_png_base64_length: combinedBase64.length,
     combined_png_sha256_prefix: imageHash

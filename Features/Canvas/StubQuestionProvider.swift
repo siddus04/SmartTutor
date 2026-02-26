@@ -10,6 +10,8 @@ struct StubQuestionProvider: TriangleQuestionProviding {
         let interactionType = InteractionPolicy.allowedModes(for: conceptId).first ?? "multiple_choice"
         let template = templateForConcept(conceptId: conceptId, interactionType: interactionType)
 
+        let assessmentContract = assessmentContract(for: conceptId, interactionType: interactionType, answer: template.answer)
+
         return TriangleResponse(
             bundleId: "stub.\(conceptId).d\(cappedDifficulty).\(intent.rawValue)",
             base: TriangleBase(
@@ -35,7 +37,8 @@ struct StubQuestionProvider: TriangleQuestionProviding {
                 interactionType: interactionType,
                 responseMode: interactionType,
                 promptText: template.prompt,
-                responseContract: responseContract(for: interactionType, answer: template.answer)
+                assessmentContract: assessmentContract,
+                responseContract: responseContract(from: assessmentContract)
             )
         )
     }
@@ -105,24 +108,70 @@ struct StubQuestionProvider: TriangleQuestionProviding {
         )
     }
 
-    private func responseContract(for interactionType: String, answer: String) -> ResponseContract {
+    private func assessmentContract(for conceptId: String, interactionType: String, answer: String) -> AssessmentContract {
+        let objectiveType: String
+        if conceptId.hasPrefix("tri.basics.") {
+            objectiveType = "identify_vertex"
+        } else if conceptId.hasPrefix("tri.structure.") {
+            objectiveType = "identify_segment"
+        } else if conceptId.hasPrefix("tri.pyth.") {
+            objectiveType = interactionType == "numeric_input" ? "compute_value" : "select_equation"
+        } else {
+            objectiveType = interactionType == "numeric_input" ? "compute_value" : "classify_statement"
+        }
+
+        let answerSchema: String
+        let gradingStrategyId: String
+        let expectedAnswer: SpecAnswer
+        let options: [ResponseOption]?
+        let numericRule: NumericRule?
+
         switch interactionType {
         case "highlight":
-            return ResponseContract(mode: "highlight", answer: SpecAnswer(kind: "point_set", value: answer), options: nil, numericRule: nil)
+            answerSchema = "point_set"
+            gradingStrategyId = "vision_locator"
+            expectedAnswer = SpecAnswer(kind: "point_set", value: answer)
+            options = nil
+            numericRule = nil
         case "numeric_input":
-            return ResponseContract(mode: "numeric_input", answer: SpecAnswer(kind: "number", value: answer), options: nil, numericRule: NumericRule(tolerance: 0))
+            answerSchema = "numeric_with_tolerance"
+            gradingStrategyId = "deterministic_rule"
+            expectedAnswer = SpecAnswer(kind: "number", value: answer)
+            options = nil
+            numericRule = NumericRule(tolerance: 0)
         default:
-            return ResponseContract(
-                mode: "multiple_choice",
-                answer: SpecAnswer(kind: "option_id", value: answer),
-                options: [
-                    ResponseOption(id: "opt_a", text: "a² + b² = c²"),
-                    ResponseOption(id: "opt_b", text: "a + b = c"),
-                    ResponseOption(id: "opt_c", text: "Right angle at C"),
-                    ResponseOption(id: "opt_ab", text: "AB")
-                ],
-                numericRule: nil
-            )
+            answerSchema = "enum"
+            gradingStrategyId = "deterministic_rule"
+            expectedAnswer = SpecAnswer(kind: "option_id", value: answer)
+            options = [
+                ResponseOption(id: "opt_a", text: "a² + b² = c²"),
+                ResponseOption(id: "opt_b", text: "a + b = c"),
+                ResponseOption(id: "opt_c", text: "Right angle at C"),
+                ResponseOption(id: "opt_ab", text: "AB")
+            ]
+            numericRule = nil
         }
+
+        return AssessmentContract(
+            schemaVersion: "m3.assessment_contract.v1",
+            conceptId: conceptId,
+            interactionType: interactionType,
+            objectiveType: objectiveType,
+            answerSchema: answerSchema,
+            gradingStrategyId: gradingStrategyId,
+            feedbackPolicyId: "hint_progressive_reveal_level_1",
+            expectedAnswer: expectedAnswer,
+            options: options,
+            numericRule: numericRule
+        )
+    }
+
+    private func responseContract(from assessmentContract: AssessmentContract) -> ResponseContract {
+        ResponseContract(
+            mode: assessmentContract.interactionType,
+            answer: assessmentContract.expectedAnswer,
+            options: assessmentContract.options,
+            numericRule: assessmentContract.numericRule
+        )
     }
 }

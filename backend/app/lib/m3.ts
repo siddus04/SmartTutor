@@ -15,6 +15,18 @@ export type QuestionSpec = {
     right_angle_at?: "A" | "B" | "C" | null;
   };
   prompt: string;
+  assessment_contract: {
+    schema_version: "m3.assessment_contract.v1";
+    concept_id: string;
+    interaction_type: "highlight" | "multiple_choice" | "numeric_input";
+    objective_type: string;
+    answer_schema: "enum" | "point_set" | "segment_set" | "numeric_with_tolerance" | "expression_equivalence" | "multi_select" | "ordered_steps";
+    grading_strategy_id: "deterministic_rule" | "vision_locator" | "symbolic_equivalence" | "rubric_llm" | "hybrid";
+    feedback_policy_id: string;
+    expected_answer: { kind: string; value: string };
+    options?: Array<{ id: string; text: string }>;
+    numeric_rule?: { tolerance?: number };
+  };
   response_contract: {
     mode: "highlight" | "multiple_choice" | "numeric_input";
     answer: { kind: string; value: string };
@@ -327,14 +339,37 @@ export function validateQuestionSpec(spec: QuestionSpec, allowedInteractionTypes
   if (spec.diagram_spec.points_normalized.some((p) => p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1)) errors.push("diagram_bounds");
   if (triangleArea(spec) <= 0.001) errors.push("diagram_degenerate");
 
-  if (spec.response_contract.mode !== spec.interaction_type) errors.push("answer_mismatch");
-  if (spec.interaction_type === "multiple_choice") {
-    if (spec.response_contract.answer.kind !== "option_id") errors.push("answer_mismatch");
-    if (!spec.response_contract.options || spec.response_contract.options.length < 2) errors.push("answer_mismatch");
-    if (!spec.response_contract.options?.some((opt) => opt.id === spec.response_contract.answer.value)) errors.push("answer_mismatch");
+  if (!spec.assessment_contract) {
+    errors.push("assessment_contract_missing");
+    return errors;
   }
-  if (spec.interaction_type === "numeric_input" && (spec.response_contract.answer.kind !== "number" || Number.isNaN(Number(spec.response_contract.answer.value)))) errors.push("answer_mismatch");
-  if (spec.interaction_type === "highlight" && !(spec.response_contract.answer.kind === "point_set" || spec.response_contract.answer.kind === "segment")) errors.push("answer_mismatch");
+
+  if (spec.assessment_contract.schema_version !== "m3.assessment_contract.v1") errors.push("assessment_contract_schema");
+  if (spec.assessment_contract.concept_id !== spec.concept_id) errors.push("assessment_contract_mismatch");
+  if (spec.assessment_contract.interaction_type !== spec.interaction_type) errors.push("assessment_contract_mismatch");
+  if (!spec.assessment_contract.expected_answer) {
+    errors.push("assessment_contract_mismatch");
+  } else if (spec.assessment_contract.expected_answer.kind !== spec.response_contract.answer.kind || spec.assessment_contract.expected_answer.value !== spec.response_contract.answer.value) {
+    errors.push("assessment_contract_mismatch");
+  }
+  if (spec.response_contract.mode !== spec.assessment_contract.interaction_type) errors.push("answer_mismatch");
+  if (spec.interaction_type === "multiple_choice") {
+    if (spec.assessment_contract.answer_schema !== "enum") errors.push("answer_mismatch");
+    if (spec.assessment_contract.grading_strategy_id !== "deterministic_rule") errors.push("answer_mismatch");
+    if (spec.assessment_contract.expected_answer.kind !== "option_id") errors.push("answer_mismatch");
+    if (!spec.assessment_contract.options || spec.assessment_contract.options.length < 2) errors.push("answer_mismatch");
+    if (!spec.assessment_contract.options?.some((opt) => opt.id === spec.assessment_contract.expected_answer.value)) errors.push("answer_mismatch");
+  }
+  if (spec.interaction_type === "numeric_input") {
+    if (spec.assessment_contract.answer_schema !== "numeric_with_tolerance") errors.push("answer_mismatch");
+    if (spec.assessment_contract.grading_strategy_id !== "deterministic_rule") errors.push("answer_mismatch");
+    if (spec.assessment_contract.expected_answer.kind !== "number" || Number.isNaN(Number(spec.assessment_contract.expected_answer.value))) errors.push("answer_mismatch");
+  }
+  if (spec.interaction_type === "highlight") {
+    if (!["point_set", "segment_set"].includes(spec.assessment_contract.answer_schema)) errors.push("answer_mismatch");
+    if (!["vision_locator", "hybrid"].includes(spec.assessment_contract.grading_strategy_id)) errors.push("answer_mismatch");
+    if (!(spec.assessment_contract.expected_answer.kind === "point_set" || spec.assessment_contract.expected_answer.kind === "segment")) errors.push("answer_mismatch");
+  }
   errors.push(...validateConceptSemantics(spec));
   return errors;
 }
@@ -418,7 +453,7 @@ export async function generateWithLLM(input: {
   if (!process.env.OPENAI_API_KEY) return fallback;
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const conceptContractText = buildConceptContractText(input);
-  const prompt = `You are SmartTutor's Grade-6 K12 geometry tutor.\nReturn strict JSON only.\nTopic scope: Triangles up to Pythagoras.\nNo trig, no formal proofs, no surds/irrational roots.\nUse concept_id=${input.conceptId}, grade=${input.grade}.\nAllowed interaction types: ${input.allowedInteractionTypes.join(",")}.\nTarget band: ${JSON.stringify(input.targetBand ?? null)}. Target direction: ${input.targetDirection ?? "null"}.\n${conceptContractText}\nSchema keys required: schema_version,question_id,question_family,concept_id,grade,interaction_type,difficulty_metadata,diagram_spec,prompt,response_contract,hint,explanation,real_world_connection.`;
+  const prompt = `You are SmartTutor's Grade-6 K12 geometry tutor.\nReturn strict JSON only.\nTopic scope: Triangles up to Pythagoras.\nNo trig, no formal proofs, no surds/irrational roots.\nUse concept_id=${input.conceptId}, grade=${input.grade}.\nAllowed interaction types: ${input.allowedInteractionTypes.join(",")}.\nTarget band: ${JSON.stringify(input.targetBand ?? null)}. Target direction: ${input.targetDirection ?? "null"}.\n${conceptContractText}\nSchema keys required: schema_version,question_id,question_family,concept_id,grade,interaction_type,difficulty_metadata,diagram_spec,prompt,assessment_contract,response_contract,hint,explanation,real_world_connection.`;
 
   try {
     const response = await client.responses.create({
@@ -458,7 +493,7 @@ function promptTemplateHash(prompt: string): string {
 }
 
 function expectedAnswerKey(spec: QuestionSpec): string {
-  return `${spec.response_contract.answer.kind}:${spec.response_contract.answer.value}`.toLowerCase().trim();
+  return `${spec.assessment_contract.expected_answer.kind}:${spec.assessment_contract.expected_answer.value}`.toLowerCase().trim();
 }
 
 function effectiveQuestionFamily(spec: QuestionSpec): string {
@@ -497,9 +532,9 @@ function heuristicRating(spec: QuestionSpec): DifficultyRating {
     contains_surd_or_irrational_root: false,
     out_of_ontology: !ontology.has(spec.concept_id),
     non_renderable_diagram: triangleArea(spec) <= 0.001,
-    interaction_answer_mismatch: (spec.interaction_type === "multiple_choice" && spec.response_contract.answer.kind !== "option_id") ||
-      (spec.interaction_type === "numeric_input" && spec.response_contract.answer.kind !== "number") ||
-      (spec.interaction_type === "highlight" && !(spec.response_contract.answer.kind === "point_set" || spec.response_contract.answer.kind === "segment"))
+    interaction_answer_mismatch: (spec.interaction_type === "multiple_choice" && spec.assessment_contract.expected_answer.kind !== "option_id") ||
+      (spec.interaction_type === "numeric_input" && spec.assessment_contract.expected_answer.kind !== "number") ||
+      (spec.interaction_type === "highlight" && !(spec.assessment_contract.expected_answer.kind === "point_set" || spec.assessment_contract.expected_answer.kind === "segment"))
   };
 
   return {
@@ -625,7 +660,7 @@ function buildSemanticTextPool(spec: QuestionSpec): string {
     spec.hint,
     spec.explanation,
     spec.real_world_connection,
-    spec.response_contract.answer.value,
+    spec.assessment_contract.expected_answer.value,
     optionText
   ].join(" ");
   return normalizeSignal(combined);
@@ -653,6 +688,14 @@ function fallbackQuestionFamily(conceptId: string, interactionType: string): str
   if (conceptId.startsWith("tri.pyth.")) return interactionType === "numeric_input" ? "pyth_numeric" : "pyth_relation";
   if (conceptId.startsWith("tri.app.")) return interactionType === "numeric_input" ? "application_numeric" : "application_scenario";
   return `generic_${interactionType}`;
+}
+
+function fallbackObjectiveType(conceptId: string): string {
+  if (conceptId.startsWith("tri.basics.")) return "identify_vertex";
+  if (conceptId.startsWith("tri.structure.")) return "identify_segment";
+  if (conceptId.startsWith("tri.reasoning.")) return "classify_statement";
+  if (conceptId.startsWith("tri.pyth.")) return "compute_value";
+  return "select_equation";
 }
 
 function makeFallbackSpec(conceptId: string, interactionType: string, difficulty: number): QuestionSpec {
@@ -721,6 +764,22 @@ function makeFallbackSpec(conceptId: string, interactionType: string, difficulty
     realWorld = "Carpenters and firefighters use this triangle model in real situations.";
   }
 
+  const assessmentContract = {
+    schema_version: "m3.assessment_contract.v1" as const,
+    concept_id: conceptId,
+    interaction_type: safeType,
+    objective_type: fallbackObjectiveType(conceptId),
+    answer_schema: safeType === "multiple_choice" ? "enum" as const : safeType === "numeric_input" ? "numeric_with_tolerance" as const : "segment_set" as const,
+    grading_strategy_id: safeType === "highlight" ? "vision_locator" as const : "deterministic_rule" as const,
+    feedback_policy_id: "hint_progressive_reveal_level_1",
+    expected_answer: {
+      kind: answerKind,
+      value: answerValue
+    },
+    options,
+    numeric_rule: safeType === "numeric_input" ? { tolerance: 0 } : undefined
+  };
+
   return {
     schema_version: "m3.question_spec.v2",
     question_id: `fallback.${conceptId}.${Date.now()}`,
@@ -739,14 +798,12 @@ function makeFallbackSpec(conceptId: string, interactionType: string, difficulty
       right_angle_at: "C"
     },
     prompt,
+    assessment_contract: assessmentContract,
     response_contract: {
-      mode: safeType,
-      answer: {
-        kind: answerKind,
-        value: answerValue
-      },
-      options,
-      numeric_rule: safeType === "numeric_input" ? { tolerance: 0 } : undefined
+      mode: assessmentContract.interaction_type,
+      answer: assessmentContract.expected_answer,
+      options: assessmentContract.options,
+      numeric_rule: assessmentContract.numeric_rule
     },
     hint,
     explanation,
