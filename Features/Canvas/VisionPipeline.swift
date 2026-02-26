@@ -378,7 +378,7 @@ struct VisionPipeline {
     static func shouldCallVision(inkDrawing: AnyObject?, renderedImage: AnyObject) -> VisionGateResult { VisionGateResult(ok: false, reasons: ["UNSUPPORTED_PLATFORM"]) }
     static func prepareAndSubmitVisionRequest(canvasView: AnyObject, background: AnyObject?, prompt: String, config: VisionRequestConfig? = nil, submit: @escaping (String, String) async -> VisionResult?) async -> VisionResult {
         _ = config
-        VisionResult(detectedSegment: nil, ambiguityScore: 1.0, confidence: 0.0, reasonCodes: ["UNSUPPORTED_PLATFORM"], studentFeedback: "Vision is not supported on this platform.")
+        return VisionResult(detectedSegment: nil, ambiguityScore: 1.0, confidence: 0.0, reasonCodes: ["UNSUPPORTED_PLATFORM"], studentFeedback: "Vision is not supported on this platform.")
     }
 }
 #endif

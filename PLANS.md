@@ -513,3 +513,40 @@
   1. Build the app target and verify `StubQuestionProvider` resolves `InteractionPolicy` without compile errors.
   2. Trigger M3 telemetry logging path and verify the pipeline log string compiles and prints normally.
   3. Build non-iOS targets and verify `VisionPipeline` no longer emits a main-actor default-argument isolation error.
+
+**Implementation notes (2026-02-26 — Assessment contract v1 end-to-end):**
+- Files touched:
+  - `Features/Canvas/TriangleModels.swift`
+  - `Features/Canvas/ValidatedLLMQuestionProvider.swift`
+  - `Features/Canvas/StubQuestionProvider.swift`
+  - `Features/Canvas/TriangleAIChecker.swift`
+  - `Features/Canvas/CanvasSandboxView.swift`
+  - `Features/Canvas/TriangleAPI.swift`
+  - `backend/app/lib/m3.ts`
+  - `backend/app/api/triangles/generate/route.ts`
+  - `backend/app/api/triangles/check/route.ts`
+  - `SmartTutorTests/M3ValidationTests.swift`
+- Manual test steps:
+  1. Generate a question from `/api/triangles/generate` and verify `assessment_contract` is present with schema/objective/answer/grading/feedback fields.
+  2. Trigger fallback question generation (e.g., disable API key) and verify fallback payload still includes `assessment_contract` plus mirrored `response_contract`.
+  3. Submit multiple-choice and numeric answers via `/api/triangles/check`; verify deterministic grading reads `assessment_contract.expected_answer` and numeric tolerance from `assessment_contract.numeric_rule`.
+  4. Submit a highlight answer with drawing; verify check payload includes full `assessment_contract` and feedback/correctness in app uses contract values.
+  5. Run M3 validation tests and confirm answer/interaction validation gates now enforce assessment contract consistency.
+
+**Implementation notes (2026-02-26 — VisionPipeline non-iOS compile guard fix):**
+- Files touched:
+  - `Features/Canvas/VisionPipeline.swift`
+  - `PLANS.md`
+- Manual test steps:
+  1. Build SmartTutor target on macOS/iOS and verify `VisionPipeline.swift` no longer fails with “Missing return in static method expected to return 'VisionResult'`.
+  2. Build non-iOS target path (or Swift typecheck in CI) and verify fallback `prepareAndSubmitVisionRequest` returns deterministic `UNSUPPORTED_PLATFORM` `VisionResult`.
+
+**Implementation notes (2026-02-26 — Xcode target membership hardening for Canvas sources):**
+- Files touched:
+  - `SmartTutor.xcodeproj/project.pbxproj`
+  - `scripts/check_xcodeproj_sources.sh`
+  - `PLANS.md`
+- Manual test steps:
+  1. Open project in Xcode and verify `Features/Canvas/InteractionPolicy.swift` appears under the Canvas group with SmartTutor target membership.
+  2. Build SmartTutor target and verify `ValidatedLLMQuestionProvider.swift` compiles without `Cannot find 'InteractionPolicy' in scope`.
+  3. Run `scripts/check_xcodeproj_sources.sh` and verify the script reports success for file-reference and sources-build-phase coverage.

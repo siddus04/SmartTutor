@@ -13,6 +13,7 @@ final class M3ValidationTests: XCTestCase {
             difficultyMetadata: spec.difficultyMetadata,
             diagramSpec: spec.diagramSpec,
             prompt: spec.prompt,
+            assessmentContract: spec.assessmentContract,
             responseContract: spec.responseContract,
             hint: spec.hint,
             explanation: spec.explanation,
@@ -33,6 +34,18 @@ final class M3ValidationTests: XCTestCase {
             difficultyMetadata: spec.difficultyMetadata,
             diagramSpec: spec.diagramSpec,
             prompt: spec.prompt,
+            assessmentContract: AssessmentContract(
+                schemaVersion: "m3.assessment_contract.v1",
+                conceptId: spec.conceptId,
+                interactionType: "numeric_input",
+                objectiveType: "compute_value",
+                answerSchema: "numeric_with_tolerance",
+                gradingStrategyId: "deterministic_rule",
+                feedbackPolicyId: "hint_progressive_reveal_level_1",
+                expectedAnswer: SpecAnswer(kind: "option_id", value: "A"),
+                options: nil,
+                numericRule: nil
+            ),
             responseContract: ResponseContract(
                 mode: "numeric_input",
                 answer: SpecAnswer(kind: "option_id", value: "A"),
@@ -59,6 +72,7 @@ final class M3ValidationTests: XCTestCase {
             difficultyMetadata: spec.difficultyMetadata,
             diagramSpec: spec.diagramSpec,
             prompt: "Tap the longest side in this triangle.",
+            assessmentContract: spec.assessmentContract,
             responseContract: spec.responseContract,
             hint: "The longest side is opposite the biggest angle.",
             explanation: "Use side-length reasoning to identify the longest side.",
@@ -83,6 +97,7 @@ final class M3ValidationTests: XCTestCase {
             difficultyMetadata: spec.difficultyMetadata,
             diagramSpec: spec.diagramSpec,
             prompt: "Pick AB.",
+            assessmentContract: spec.assessmentContract,
             responseContract: spec.responseContract,
             hint: "Pick AB.",
             explanation: "Pick AB.",
@@ -132,6 +147,18 @@ final class M3ValidationTests: XCTestCase {
                 rightAngleAt: "C"
             ),
             prompt: "Circle the hypotenuse.",
+            assessmentContract: AssessmentContract(
+                schemaVersion: "m3.assessment_contract.v1",
+                conceptId: "tri.structure.hypotenuse",
+                interactionType: "highlight",
+                objectiveType: "identify_segment",
+                answerSchema: "segment_set",
+                gradingStrategyId: "vision_locator",
+                feedbackPolicyId: "hint_progressive_reveal_level_1",
+                expectedAnswer: SpecAnswer(kind: "segment", value: "AB"),
+                options: nil,
+                numericRule: nil
+            ),
             responseContract: ResponseContract(
                 mode: "highlight",
                 answer: SpecAnswer(kind: "segment", value: "AB"),
