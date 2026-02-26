@@ -33,6 +33,7 @@ final class TriangleAIChecker {
         submittedChoiceId: String?,
         submittedNumericValue: String?,
         numericTolerance: Double?,
+        assessmentContract: AssessmentContract?,
         combinedPNGBase64: String,
         mergedImagePath: String?
     ) async -> ResultEnvelope {
@@ -51,6 +52,16 @@ final class TriangleAIChecker {
             responseContract["numeric_rule"] = ["tolerance": numericTolerance]
         }
 
+        var assessmentPayload: [String: Any]? = nil
+        if let assessmentContract {
+            assessmentPayload = [
+                "objective_type": assessmentContract.objectiveType,
+                "answer_schema": assessmentContract.answerSchema,
+                "grading_strategy_id": assessmentContract.gradingStrategyId,
+                "feedback_policy_id": assessmentContract.feedbackPolicyId
+            ]
+        }
+
         let payload: [String: Any?] = [
             "concept_id": conceptId,
             "prompt_text": promptText,
@@ -62,7 +73,8 @@ final class TriangleAIChecker {
             "expected_answer_value": expectedAnswerValue,
             "submitted_choice_id": submittedChoiceId,
             "submitted_numeric_value": submittedNumericValue,
-            "response_contract": responseContract.isEmpty ? nil : responseContract
+            "response_contract": responseContract.isEmpty ? nil : responseContract,
+            "assessment_contract": assessmentPayload
         ]
         let requestData = try? JSONSerialization.data(withJSONObject: payload, options: [])
         request.httpBody = requestData

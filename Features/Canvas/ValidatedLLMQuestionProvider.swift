@@ -146,7 +146,8 @@ enum TriangleAdapter {
                 interactionType: spec.interactionType,
                 responseMode: spec.responseContract.mode,
                 promptText: spec.prompt,
-                responseContract: spec.responseContract
+                responseContract: spec.responseContract,
+                assessmentContract: spec.assessmentContract
             )
         )
     }
@@ -270,6 +271,11 @@ enum QuestionSpecValidator {
             throw ValidationError.interaction
         }
 
+        guard let assessmentContract = question.assessmentContract else { throw ValidationError.assessmentContract }
+        guard !assessmentContract.objectiveType.isEmpty, !assessmentContract.answerSchema.isEmpty, !assessmentContract.gradingStrategyId.isEmpty, !assessmentContract.feedbackPolicyId.isEmpty else {
+            throw ValidationError.assessmentContract
+        }
+
         try validateConceptSemantics(question)
     }
 
@@ -357,4 +363,5 @@ enum ValidationError: Error {
     case answerMismatch
     case conceptMismatch
     case genericRepetition
+    case assessmentContract
 }

@@ -21,6 +21,7 @@ struct TriangleBase: Codable {
     let responseMode: String?
     let promptText: String?
     let responseContract: ResponseContract?
+    let assessmentContract: AssessmentContract?
 
     enum CodingKeys: String, CodingKey {
         case tutorMessages = "tutor_messages"
@@ -33,6 +34,7 @@ struct TriangleBase: Codable {
         case responseMode = "response_mode"
         case promptText = "prompt_text"
         case responseContract = "response_contract"
+        case assessmentContract = "assessment_contract"
     }
 
     init(
@@ -45,7 +47,8 @@ struct TriangleBase: Codable {
         interactionType: String? = nil,
         responseMode: String? = nil,
         promptText: String? = nil,
-        responseContract: ResponseContract? = nil
+        responseContract: ResponseContract? = nil,
+        assessmentContract: AssessmentContract? = nil
     ) {
         self.tutorMessages = tutorMessages
         self.diagramSpec = diagramSpec
@@ -57,6 +60,7 @@ struct TriangleBase: Codable {
         self.responseMode = responseMode
         self.promptText = promptText
         self.responseContract = responseContract
+        self.assessmentContract = assessmentContract
     }
 }
 
@@ -118,6 +122,7 @@ struct QuestionSpec: Codable {
     let diagramSpec: DiagramSpec
     let prompt: String
     let responseContract: ResponseContract
+    let assessmentContract: AssessmentContract?
     let hint: String
     let explanation: String
     let realWorldConnection: String
@@ -133,9 +138,24 @@ struct QuestionSpec: Codable {
         case diagramSpec = "diagram_spec"
         case prompt
         case responseContract = "response_contract"
+        case assessmentContract = "assessment_contract"
         case hint
         case explanation
         case realWorldConnection = "real_world_connection"
+    }
+}
+
+struct AssessmentContract: Codable {
+    let objectiveType: String
+    let answerSchema: String
+    let gradingStrategyId: String
+    let feedbackPolicyId: String
+
+    enum CodingKeys: String, CodingKey {
+        case objectiveType = "objective_type"
+        case answerSchema = "answer_schema"
+        case gradingStrategyId = "grading_strategy_id"
+        case feedbackPolicyId = "feedback_policy_id"
     }
 }
 
