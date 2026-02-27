@@ -159,6 +159,31 @@ enum QuestionSpecValidator {
         let forbiddenSignals: [String]
     }
 
+
+    private static let objectiveToInteractionCompatibility: [String: Set<String>] = [
+        "identify_vertex": ["highlight", "multiple_choice"],
+        "identify_segment": ["highlight", "multiple_choice"],
+        "identify_angle": ["highlight", "multiple_choice"],
+        "classify_statement": ["multiple_choice"],
+        "compute_value": ["numeric_input", "multiple_choice"],
+        "select_equation": ["multiple_choice", "numeric_input"],
+        "solve_missing_side": ["numeric_input", "multiple_choice"]
+    ]
+
+    private static let answerSchemaToStrategyCompatibility: [String: Set<String>] = [
+        "enum": ["deterministic_rule"],
+        "point_set": ["vision_locator", "hybrid"],
+        "segment_set": ["vision_locator", "hybrid"],
+        "numeric_with_tolerance": ["deterministic_rule"],
+        "expression_equivalence": ["symbolic_equivalence"],
+        "multi_select": ["deterministic_rule", "rubric_llm"],
+        "ordered_steps": ["rubric_llm"]
+    ]
+
+    private static let conceptToAllowedStrategies: [String: Set<String>] = [
+        "tri.pyth.equation_a2_b2_c2": ["symbolic_equivalence", "deterministic_rule", "rubric_llm"]
+    ]
+
     private static let conceptSemanticRules: [String: ConceptSemanticRule] = [
         "tri.basics.identify_right_angle": ConceptSemanticRule(
             requiredSignalGroups: [["right angle", "90"]],
@@ -260,6 +285,21 @@ enum QuestionSpecValidator {
         guard question.assessmentContract.interactionType == question.interactionType else { throw ValidationError.answerMismatch }
         guard question.responseContract.mode == question.assessmentContract.interactionType else { throw ValidationError.answerMismatch }
         guard question.assessmentContract.expectedAnswer.kind == question.responseContract.answer.kind && question.assessmentContract.expectedAnswer.value == question.responseContract.answer.value else { throw ValidationError.answerMismatch }
+
+        if let allowedInteractions = objectiveToInteractionCompatibility[question.assessmentContract.objectiveType],
+           !allowedInteractions.contains(question.interactionType) {
+            throw ValidationError.interaction
+        }
+
+        if let allowedStrategies = answerSchemaToStrategyCompatibility[question.assessmentContract.answerSchema],
+           !allowedStrategies.contains(question.assessmentContract.gradingStrategyId) {
+            throw ValidationError.answerMismatch
+        }
+
+        let conceptStrategies = conceptToAllowedStrategies[question.conceptId] ?? ["deterministic_rule", "vision_locator", "hybrid", "symbolic_equivalence", "rubric_llm"]
+        guard conceptStrategies.contains(question.assessmentContract.gradingStrategyId) else {
+            throw ValidationError.conceptMismatch
+        }
 
         switch question.interactionType {
         case "highlight":

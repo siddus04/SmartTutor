@@ -111,7 +111,7 @@ function interpretEvidence(input: GradeRouterInput): InterpretedEvidence {
   };
 }
 
-function mapToStrategyFamily(gradingStrategyId?: string | null, answerSchema?: string | null): StrategyFamily {
+export function resolveStrategyFamily(gradingStrategyId?: string | null, answerSchema?: string | null): StrategyFamily {
   const strategy = gradingStrategyId?.trim().toLowerCase();
   const schema = answerSchema?.trim().toLowerCase();
 
@@ -236,9 +236,14 @@ function getPolicy(conceptId: string): ConceptPolicy {
   return conceptPolicyRegistry[conceptId] ?? DEFAULT_POLICY;
 }
 
+export function isStrategyAllowedForConcept(conceptId: string, strategy: StrategyFamily): boolean {
+  const policy = getPolicy(conceptId);
+  return policy.acceptable_strategies.includes(strategy);
+}
+
 export async function gradeWithRouter(input: GradeRouterInput): Promise<GradingResultEnvelope> {
   const evidence = interpretEvidence(input);
-  const inferred = mapToStrategyFamily(input.grading_strategy_id, input.answer_schema);
+  const inferred = resolveStrategyFamily(input.grading_strategy_id, input.answer_schema);
   const policy = getPolicy(input.concept_id);
   const candidateOrder = [inferred, ...policy.fallback_order.filter((strategy) => strategy !== inferred)];
 

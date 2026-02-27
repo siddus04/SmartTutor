@@ -586,3 +586,17 @@
   3. POST `/api/triangles/check` with correct submission and verify feedback gives concept-relevant reinforcement and `next_action="proceed"`.
   4. Verify response now includes `feedback_metadata` object with `message`, `hint_level`, `remediation_tag`, and `next_action` fields for all grading outcomes.
   5. Run backend build to confirm TypeScript compiles with no new errors.
+
+**Implementation notes (2026-02-27 — Generation-time contract compatibility checks + grading benchmark harness):**
+- Files touched:
+  - `Features/Canvas/ValidatedLLMQuestionProvider.swift`
+  - `SmartTutorTests/M3ValidationTests.swift`
+  - `backend/app/lib/gradingRouter.ts`
+  - `backend/app/lib/m3.ts`
+  - `backend/app/lib/gradingBenchmark.ts`
+  - `PLANS.md`
+- Manual test steps:
+  1. Trigger question generation with `objective_type="compute_value"` + `interaction_type="highlight"` and verify validation rejects with `objective_interaction_mismatch`/interaction mismatch.
+  2. Trigger generation with `answer_schema="enum"` + `grading_strategy_id="symbolic_equivalence"` and verify validation rejects with `strategy_schema_mismatch`.
+  3. Trigger generation for `tri.pyth.equation_a2_b2_c2` with disallowed strategy (for example `vision_locator`) and verify validation rejects with `concept_policy_strategy_mismatch`.
+  4. Run benchmark harness against labeled cases (correct/incorrect/ambiguous/adversarial), including symbolic equation variants, numeric tolerance boundaries, and visual target classes; verify metrics output includes accuracy by concept/objective, ambiguity FP/FN, feedback quality flags, and strategy regression alerts.
