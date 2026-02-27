@@ -575,3 +575,14 @@
   3. POST `/api/triangles/check` with symbolic expression input and `answer_schema="expression_equivalence"`; verify interpretation stage parses equation string and evaluation stage canonicalizes before compare.
   4. POST `/api/triangles/check` with highlight payload where vision returns `detected_target_class` for each class (`vertices`, `segments`, `angles`, `enclosed_regions`, `symbolic_marks`) and verify normalized class labels flow through detection + grading evidence summary.
   5. Call `/api/triangles/generate` and inspect prompt construction logs to confirm diagram target taxonomy comes from shared `diagramTargets` definition.
+
+**Implementation notes (2026-02-26 — Feedback policy mapping + structured feedback metadata):**
+- Files touched:
+  - `backend/app/api/triangles/check/route.ts`
+  - `PLANS.md`
+- Manual test steps:
+  1. POST `/api/triangles/check` with incorrect multiple-choice/numeric submissions and verify feedback message states detected answer, explains mismatch with prompt intent, and includes bounded hints without answer leakage by default.
+  2. POST `/api/triangles/check` with ambiguous submission (e.g., missing numeric/choice input) and verify feedback message requests a retry aligned to objective vocabulary (vertex/equation/number/segment/etc.).
+  3. POST `/api/triangles/check` with correct submission and verify feedback gives concept-relevant reinforcement and `next_action="proceed"`.
+  4. Verify response now includes `feedback_metadata` object with `message`, `hint_level`, `remediation_tag`, and `next_action` fields for all grading outcomes.
+  5. Run backend build to confirm TypeScript compiles with no new errors.
