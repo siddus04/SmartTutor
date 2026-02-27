@@ -1,6 +1,8 @@
 import OpenAI from "openai";
 import { createHash } from "crypto";
 import { DIAGRAM_TARGET_CLASSES } from "./diagramTargets";
+import { isStrategyAllowedForConcept, resolveStrategyFamily } from "./gradingRouter";
+import type { StrategyFamily } from "./gradingRouter";
 
 export type QuestionSpec = {
   schema_version: "m3.question_spec.v2";
@@ -76,6 +78,7 @@ export type LearnerContext = {
   recentQuestionFamilies: string[];
 };
 
+
 export type NoveltyConfig = {
   promptHashWindow: number;
   expectedAnswerRepeatLimit: number;
@@ -86,6 +89,26 @@ const DEFAULT_NOVELTY_CONFIG: NoveltyConfig = {
   promptHashWindow: 3,
   expectedAnswerRepeatLimit: 2,
   familyRepeatLimit: 2
+};
+
+const objectiveInteractionCompatibility: Record<string, QuestionSpec["interaction_type"][]> = {
+  identify_vertex: ["highlight", "multiple_choice"],
+  identify_segment: ["highlight", "multiple_choice"],
+  identify_angle: ["highlight", "multiple_choice"],
+  classify_statement: ["multiple_choice"],
+  compute_value: ["numeric_input", "multiple_choice"],
+  select_equation: ["multiple_choice", "numeric_input"],
+  solve_missing_side: ["numeric_input", "multiple_choice"]
+};
+
+const strategySchemaCompatibility: Record<QuestionSpec["assessment_contract"]["answer_schema"], StrategyFamily[]> = {
+  enum: ["deterministic_choice"],
+  point_set: ["visual_target_locator"],
+  segment_set: ["visual_target_locator"],
+  numeric_with_tolerance: ["numeric_rule"],
+  expression_equivalence: ["symbolic_equivalence"],
+  multi_select: ["deterministic_choice", "rubric_llm"],
+  ordered_steps: ["rubric_llm"]
 };
 
 const ontology = new Set([
@@ -354,6 +377,22 @@ export function validateQuestionSpec(spec: QuestionSpec, allowedInteractionTypes
     errors.push("assessment_contract_mismatch");
   }
   if (spec.response_contract.mode !== spec.assessment_contract.interaction_type) errors.push("answer_mismatch");
+
+  const compatibleInteractions = objectiveInteractionCompatibility[spec.assessment_contract.objective_type];
+  if (compatibleInteractions && !compatibleInteractions.includes(spec.interaction_type)) {
+    errors.push("objective_interaction_mismatch");
+  }
+
+  const resolvedStrategy = resolveStrategyFamily(spec.assessment_contract.grading_strategy_id, spec.assessment_contract.answer_schema);
+  const supportedStrategies = strategySchemaCompatibility[spec.assessment_contract.answer_schema] ?? [];
+  if (!supportedStrategies.includes(resolvedStrategy)) {
+    errors.push("strategy_schema_mismatch");
+  }
+
+  if (!isStrategyAllowedForConcept(spec.concept_id, resolvedStrategy)) {
+    errors.push("concept_policy_strategy_mismatch");
+  }
+
   if (spec.interaction_type === "multiple_choice") {
     if (spec.assessment_contract.answer_schema !== "enum") errors.push("answer_mismatch");
     if (spec.assessment_contract.grading_strategy_id !== "deterministic_rule") errors.push("answer_mismatch");

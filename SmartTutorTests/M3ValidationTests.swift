@@ -111,6 +111,142 @@ final class M3ValidationTests: XCTestCase {
         }
     }
 
+
+    func testQuestionSpecValidatorRejectsObjectiveInteractionMismatch() throws {
+        var spec = makeValidQuestionSpec()
+        spec = QuestionSpec(
+            schemaVersion: spec.schemaVersion,
+            questionId: spec.questionId,
+            conceptId: spec.conceptId,
+            grade: spec.grade,
+            interactionType: "highlight",
+            difficultyMetadata: spec.difficultyMetadata,
+            diagramSpec: spec.diagramSpec,
+            prompt: spec.prompt,
+            assessmentContract: AssessmentContract(
+                schemaVersion: "m3.assessment_contract.v1",
+                conceptId: spec.conceptId,
+                interactionType: "highlight",
+                objectiveType: "compute_value",
+                answerSchema: "segment_set",
+                gradingStrategyId: "vision_locator",
+                feedbackPolicyId: "hint_progressive_reveal_level_1",
+                expectedAnswer: SpecAnswer(kind: "segment", value: "AB"),
+                options: nil,
+                numericRule: nil
+            ),
+            responseContract: ResponseContract(
+                mode: "highlight",
+                answer: SpecAnswer(kind: "segment", value: "AB"),
+                options: nil,
+                numericRule: nil
+            ),
+            hint: spec.hint,
+            explanation: spec.explanation,
+            realWorldConnection: spec.realWorldConnection
+        )
+
+        XCTAssertThrowsError(try QuestionSpecValidator.validate(question: spec, conceptId: spec.conceptId, allowedInteractionTypes: ["highlight"])) { error in
+            guard case ValidationError.interaction = error else {
+                return XCTFail("Expected interaction, got \(error)")
+            }
+        }
+    }
+
+    func testQuestionSpecValidatorRejectsAnswerSchemaStrategyMismatch() throws {
+        var spec = makeValidQuestionSpec()
+        spec = QuestionSpec(
+            schemaVersion: spec.schemaVersion,
+            questionId: spec.questionId,
+            conceptId: spec.conceptId,
+            grade: spec.grade,
+            interactionType: "multiple_choice",
+            difficultyMetadata: spec.difficultyMetadata,
+            diagramSpec: spec.diagramSpec,
+            prompt: "Which side is the hypotenuse?",
+            assessmentContract: AssessmentContract(
+                schemaVersion: "m3.assessment_contract.v1",
+                conceptId: spec.conceptId,
+                interactionType: "multiple_choice",
+                objectiveType: "identify_segment",
+                answerSchema: "enum",
+                gradingStrategyId: "symbolic_equivalence",
+                feedbackPolicyId: "hint_progressive_reveal_level_1",
+                expectedAnswer: SpecAnswer(kind: "option_id", value: "A"),
+                options: [
+                    ResponseOption(id: "A", text: "AB"),
+                    ResponseOption(id: "B", text: "BC")
+                ],
+                numericRule: nil
+            ),
+            responseContract: ResponseContract(
+                mode: "multiple_choice",
+                answer: SpecAnswer(kind: "option_id", value: "A"),
+                options: [
+                    ResponseOption(id: "A", text: "AB"),
+                    ResponseOption(id: "B", text: "BC")
+                ],
+                numericRule: nil
+            ),
+            hint: spec.hint,
+            explanation: spec.explanation,
+            realWorldConnection: spec.realWorldConnection
+        )
+
+        XCTAssertThrowsError(try QuestionSpecValidator.validate(question: spec, conceptId: spec.conceptId, allowedInteractionTypes: ["multiple_choice"])) { error in
+            guard case ValidationError.answerMismatch = error else {
+                return XCTFail("Expected answerMismatch, got \(error)")
+            }
+        }
+    }
+
+    func testQuestionSpecValidatorRejectsConceptPolicyStrategyMismatch() throws {
+        var spec = makeValidQuestionSpec()
+        spec = QuestionSpec(
+            schemaVersion: spec.schemaVersion,
+            questionId: spec.questionId,
+            conceptId: "tri.pyth.equation_a2_b2_c2",
+            grade: spec.grade,
+            interactionType: "multiple_choice",
+            difficultyMetadata: spec.difficultyMetadata,
+            diagramSpec: spec.diagramSpec,
+            prompt: "Which equation matches this right triangle?",
+            assessmentContract: AssessmentContract(
+                schemaVersion: "m3.assessment_contract.v1",
+                conceptId: "tri.pyth.equation_a2_b2_c2",
+                interactionType: "multiple_choice",
+                objectiveType: "select_equation",
+                answerSchema: "enum",
+                gradingStrategyId: "vision_locator",
+                feedbackPolicyId: "hint_progressive_reveal_level_1",
+                expectedAnswer: SpecAnswer(kind: "option_id", value: "A"),
+                options: [
+                    ResponseOption(id: "A", text: "a² + b² = c²"),
+                    ResponseOption(id: "B", text: "a + b = c")
+                ],
+                numericRule: nil
+            ),
+            responseContract: ResponseContract(
+                mode: "multiple_choice",
+                answer: SpecAnswer(kind: "option_id", value: "A"),
+                options: [
+                    ResponseOption(id: "A", text: "a² + b² = c²"),
+                    ResponseOption(id: "B", text: "a + b = c")
+                ],
+                numericRule: nil
+            ),
+            hint: "Use squares of side lengths.",
+            explanation: "Right triangles satisfy a² + b² = c².",
+            realWorldConnection: "This helps when checking right triangles in ramps."
+        )
+
+        XCTAssertThrowsError(try QuestionSpecValidator.validate(question: spec, conceptId: spec.conceptId, allowedInteractionTypes: ["multiple_choice"])) { error in
+            guard case ValidationError.conceptMismatch = error else {
+                return XCTFail("Expected conceptMismatch, got \(error)")
+            }
+        }
+    }
+
     func testDifficultyRatingValidatorAcceptsRange() throws {
         let rating = DifficultyRating(
             schemaVersion: "m3.difficulty_rating.v1",
