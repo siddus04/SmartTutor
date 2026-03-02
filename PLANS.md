@@ -141,7 +141,8 @@
 - Difficulty adaptation:
   - increase on success,
   - lower on failure,
-  - trigger remediat unlock threshold by mastered sub-concept percentage.
+  - trigger remediation.
+- Level unlock threshold by mastered sub-concept percentage.
 - Hard cap at Grade 6 difficulty ceiling.
 
 **Files touched (planned):**
