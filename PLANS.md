@@ -611,3 +611,25 @@
   3. Circle one clear segment and tap **Check**; verify normal AI check flow still runs.
   4. Trigger a new question and verify prior selection/ambiguity submission state is reset.
   5. Submit an incorrect or ambiguous visual check that clears the canvas; verify submission state is reset so the next **Check** requires a fresh circle.
+
+**Implementation notes (2026-03-06 — Right-angle vertex feedback wording + visual hint alignment):**
+- Files touched:
+  - `backend/app/api/triangles/check/route.ts`
+  - `PLANS.md`
+- Manual test steps:
+  1. POST `/api/triangles/check` for a right-angle vertex prompt with `objective_type` containing `vertex`, `prompt_text` containing `right-angle`, and an incorrect detected vertex; verify feedback says the selected vertex is not the right-angle vertex (instead of a target-type mismatch).
+  2. Verify the same incorrect vertex case includes visual hints about the small square angle marker and the vertex that marker touches.
+  3. POST `/api/triangles/check` for a non-right-angle objective with an incorrect answer; verify fallback mismatch wording remains generic and objective-type based.
+
+**Implementation notes (2026-03-06 — Contextual feedback engine wiring and single-PR hardening):**
+- Files touched:
+  - `backend/app/lib/feedbackEngine.ts`
+  - `backend/app/lib/gradingRouter.ts`
+  - `backend/app/api/triangles/check/route.ts`
+  - `PLANS.md`
+- Manual test steps:
+  1. POST `/api/triangles/check` for an incorrect highlight response and verify `grading_result.feedback_message` is populated from contextual feedback generation and surfaced in `student_feedback`.
+  2. Verify wrong-answer responses use encouraging language + layered hints + reflective question from contextual prompt output when available.
+  3. Disable or fail feedback model call path and verify deterministic fallback feedback still works with cue-aware hints derived from prompt text.
+  4. POST ambiguous visual input and verify retry messaging still asks for one clear target.
+  5. POST correct responses across enum/numeric/highlight and verify existing reinforcement/proceed behavior remains stable.

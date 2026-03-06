@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import crypto from "crypto";
 import { GradingResultEnvelope, gradeWithRouter } from "../../../lib/gradingRouter";
 import { DIAGRAM_TARGET_CLASSES, DiagramTargetClass, normalizeDiagramTargetClass } from "../../../lib/diagramTargets";
+import { buildStudentFeedback, FeedbackMetadata } from "../../../lib/feedbackEngine";
 
 const DIAGRAM_TARGET_LABELS = DIAGRAM_TARGET_CLASSES.join(", ");
 
@@ -61,9 +62,10 @@ Write a single short feedback message for a Grade 4–6 student.
 Rules:
 - If detected_target is null OR ambiguity_score >= 0.6: ask the student to re-circle just ONE target clearly.
 - If detected_target is wrong:
-  - Explicitly say their choice is not correct for the current question.
+  - Start with encouraging tone and explicitly say their choice is not correct for the current question.
   - Mention the detected_target (e.g., "You circled CA").
-  - Provide layered hints in two short sentences aligned with the prompt/context.
+  - Provide layered hints in two short sentences aligned with the prompt/context and visual cues in the diagram when relevant (marker/symbol/label order).
+  - End with a short reflective question that helps the student self-correct.
   - Do NOT reveal the correct side label directly.
 - If detected_target is correct:
   - Praise briefly.
@@ -85,7 +87,7 @@ const CORS_HEADERS = {
 const OBJECTIVE_VOCAB: Record<string, { targetType: string; boundedHints: [string, string]; reinforcement: string }> = {
   vertex: {
     targetType: "vertex",
-    boundedHints: ["Hint 1: Find a single corner point with a letter.", "Hint 2: Match the letter to the exact point the prompt names."],
+    boundedHints: ["Hint 1: Look for the small square angle marker in the triangle.", "Hint 2: The right-angle vertex is the corner that marker touches."],
     reinforcement: "Nice work spotting the right corner point in the triangle."
   },
   equation: {
@@ -113,23 +115,6 @@ const OBJECTIVE_VOCAB: Record<string, { targetType: string; boundedHints: [strin
     boundedHints: ["Hint 1: Use a short sentence with math words from the prompt.", "Hint 2: Name the key triangle relationship directly."],
     reinforcement: "Great explanation—you used triangle vocabulary clearly."
   }
-};
-
-type FeedbackNextAction = "retry" | "proceed" | "scaffold";
-
-type FeedbackMetadata = {
-  message: string;
-  hint_level: 0 | 1 | 2;
-  remediation_tag: string;
-  next_action: FeedbackNextAction;
-};
-
-type FeedbackContext = {
-  conceptId: string;
-  objectiveType: string;
-  expectedAnswer: string;
-  detectedAnswer: string | null;
-  noAnswerLeakage: boolean;
 };
 
 export const runtime = "nodejs";
@@ -242,6 +227,7 @@ export async function POST(request: Request) {
   const response = toLegacyResponse(gradingEnvelope, {
     conceptId,
     objectiveType,
+    promptText,
     expectedAnswer: expectedAnswerValue,
     noAnswerLeakage: !/allow_answer_leak/i.test(feedbackPolicyId)
   });
@@ -251,17 +237,18 @@ export async function POST(request: Request) {
 
 function toLegacyResponse(
   envelope: GradingResultEnvelope,
-  config: { conceptId: string; objectiveType: string; expectedAnswer: string; noAnswerLeakage: boolean }
+  config: { conceptId: string; objectiveType: string; promptText: string; expectedAnswer: string; noAnswerLeakage: boolean }
 ) {
   const detected = envelope.detected_answer.value == null ? null : String(envelope.detected_answer.value);
   const correctness = envelope.correctness === "correct";
   const feedback = buildStudentFeedback(envelope, {
     conceptId: config.conceptId,
     objectiveType: config.objectiveType,
+    promptText: config.promptText,
     expectedAnswer: config.expectedAnswer,
     detectedAnswer: detected,
     noAnswerLeakage: config.noAnswerLeakage
-  });
+  }, resolveObjectiveVocabulary(config.objectiveType, envelope.detected_answer.kind));
 
   return {
     detected_segment: detected,
@@ -290,41 +277,6 @@ function resolveObjectiveVocabulary(objectiveType: string, detectedKind: Grading
   if (detectedKind === "point_set") return OBJECTIVE_VOCAB.vertex;
   if (detectedKind === "option_id") return OBJECTIVE_VOCAB.segment;
   return OBJECTIVE_VOCAB.text;
-}
-
-function buildStudentFeedback(envelope: GradingResultEnvelope, context: FeedbackContext): FeedbackMetadata {
-  const vocab = resolveObjectiveVocabulary(context.objectiveType, envelope.detected_answer.kind);
-  const conceptLabel = context.conceptId.startsWith("tri.pyth") ? "Pythagoras" : "triangle";
-
-  if (envelope.correctness === "correct") {
-    return {
-      message: `${vocab.reinforcement} ${conceptLabel === "Pythagoras" ? "That pattern helps when you solve missing-side problems." : "You used the prompt intent correctly."}`,
-      hint_level: 0,
-      remediation_tag: "reinforce_correct_concept",
-      next_action: "proceed"
-    };
-  }
-
-  if (envelope.correctness === "ambiguous") {
-    return {
-      message: `I detected an unclear ${vocab.targetType}. Please retry with one clear ${vocab.targetType} so I can grade it accurately.`,
-      hint_level: 1,
-      remediation_tag: "ambiguous_input_retry",
-      next_action: "retry"
-    };
-  }
-
-  const detected = context.detectedAnswer ?? "no clear answer";
-  const mismatchText = `I detected ${detected}. The prompt asks for a ${vocab.targetType}, so this does not match the prompt intent.`;
-  const hints = `${vocab.boundedHints[0]} ${vocab.boundedHints[1]}`;
-  const answerLeak = context.noAnswerLeakage ? "" : ` The correct answer is ${context.expectedAnswer}.`;
-
-  return {
-    message: `${mismatchText} ${hints}${answerLeak}`,
-    hint_level: 2,
-    remediation_tag: "incorrect_with_bounded_hints",
-    next_action: envelope.correctness === "error" ? "scaffold" : "retry"
-  };
 }
 
 async function evaluateVisualTarget(input: {
@@ -395,7 +347,8 @@ async function evaluateVisualTarget(input: {
       correctness,
       confidence,
       ambiguity_codes: reasonCodes,
-      evidence_summary: `visual_detection_class=${detectedTargetClass}; visual_detection_target=${detected ?? "null"}; expected_class=${expectedClass}; expected=${expected ?? "null"}; llm_feedback=${feedback}`
+      evidence_summary: `visual_detection_class=${detectedTargetClass}; visual_detection_target=${detected ?? "null"}; expected_class=${expectedClass}; expected=${expected ?? "null"}; llm_feedback=${feedback}`,
+      feedback_message: feedback
     };
   } catch (error) {
     console.error("[API][Check][VisualTargetError]", error);

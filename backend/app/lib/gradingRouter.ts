@@ -18,6 +18,7 @@ export type GradingResultEnvelope = {
   confidence: number;
   ambiguity_codes: string[];
   evidence_summary: string;
+  feedback_message?: string;
 };
 
 export type ConceptPolicy = {
