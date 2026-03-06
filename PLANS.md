@@ -611,3 +611,14 @@
   3. Circle one clear segment and tap **Check**; verify normal AI check flow still runs.
   4. Trigger a new question and verify prior selection/ambiguity submission state is reset.
   5. Submit an incorrect or ambiguous visual check that clears the canvas; verify submission state is reset so the next **Check** requires a fresh circle.
+
+**Implementation notes (2026-03-06 — Optional assessment feedback contract + reusable feedback engine):**
+- Files touched:
+  - `backend/app/lib/m3.ts`
+  - `backend/app/lib/feedbackEngine.ts` (new)
+  - `backend/app/api/triangles/check/route.ts`
+  - `PLANS.md`
+- Manual test steps:
+  1. POST existing highlight, multiple-choice, and numeric `/api/triangles/check` payloads without `assessment_contract.feedback_contract`; verify response shape and behavior remain unchanged.
+  2. POST `/api/triangles/check` payloads with minimal `assessment_contract.feedback_contract` (for example only `feedback_style` and `reveal_policy`) and verify grading still succeeds.
+  3. Verify `student_feedback` and `feedback_metadata` are present for correct, incorrect, and ambiguous outcomes.
