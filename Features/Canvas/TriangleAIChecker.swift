@@ -110,14 +110,15 @@ final class TriangleAIChecker {
         assessmentContract: AssessmentContract,
         rightAngleAt: String?
     ) -> [String: Any] {
-        [
+        let rightAngleValue: Any = rightAngleAt ?? NSNull()
+        return [
             "prompt_text": promptText,
             "interaction_type": assessmentContract.interactionType,
             "objective_type": assessmentContract.objectiveType,
             "expected_answer": assessmentContract.expectedAnswer.value,
             "expected_answer_kind": assessmentContract.expectedAnswer.kind,
             "feedback_policy_id": assessmentContract.feedbackPolicyId,
-            "diagram_metadata": ["right_angle_at": rightAngleAt ?? NSNull()]
+            "diagram_metadata": ["right_angle_at": rightAngleValue]
         ]
     }
 
