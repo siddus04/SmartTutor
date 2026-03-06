@@ -192,9 +192,13 @@ export async function POST(request: Request) {
   });
 
   const response = toLegacyResponse(gradingEnvelope, {
+    promptText,
+    interactionType: responseMode,
     objectiveType,
     expectedAnswer: expectedAnswerValue,
+    expectedAnswerKind,
     noAnswerLeakage: !/allow_answer_leak/i.test(feedbackPolicyId),
+    feedbackPolicyId,
     feedbackPolicy: body.assessment_contract?.feedback_contract
   });
   console.log("[API][Check][Response]", JSON.stringify(response));
@@ -203,14 +207,28 @@ export async function POST(request: Request) {
 
 function toLegacyResponse(
   envelope: GradingResultEnvelope,
-  config: { objectiveType: string; expectedAnswer: string; noAnswerLeakage: boolean; feedbackPolicy?: FeedbackPolicy }
+  config: {
+    promptText: string;
+    interactionType: string;
+    objectiveType: string;
+    expectedAnswer: string;
+    expectedAnswerKind: string | null;
+    noAnswerLeakage: boolean;
+    feedbackPolicyId: string;
+    feedbackPolicy?: FeedbackPolicy;
+  }
 ) {
   const detected = envelope.detected_answer.value == null ? null : String(envelope.detected_answer.value);
   const correctness = envelope.correctness === "correct";
   const feedback = buildFeedbackMetadata(envelope, {
+    promptText: config.promptText,
+    interactionType: config.interactionType,
     objectiveType: config.objectiveType,
     expectedAnswer: config.expectedAnswer,
+    expectedAnswerKind: config.expectedAnswerKind,
     detectedAnswer: detected,
+    detectedAnswerKind: envelope.detected_answer.kind,
+    feedbackPolicyId: config.feedbackPolicyId,
     noAnswerLeakage: config.noAnswerLeakage
   }, config.feedbackPolicy);
 
