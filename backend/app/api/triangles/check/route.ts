@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import crypto from "crypto";
 import { GradingResultEnvelope, gradeWithRouter } from "../../../lib/gradingRouter";
 import { DIAGRAM_TARGET_CLASSES, DiagramTargetClass, normalizeDiagramTargetClass } from "../../../lib/diagramTargets";
+import { buildFeedbackMetadata, FeedbackPolicy } from "../../../lib/feedbackEngine";
 
 const DIAGRAM_TARGET_LABELS = DIAGRAM_TARGET_CLASSES.join(", ");
 
@@ -82,56 +83,6 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization"
 };
 
-const OBJECTIVE_VOCAB: Record<string, { targetType: string; boundedHints: [string, string]; reinforcement: string }> = {
-  vertex: {
-    targetType: "vertex",
-    boundedHints: ["Hint 1: Find a single corner point with a letter.", "Hint 2: Match the letter to the exact point the prompt names."],
-    reinforcement: "Nice work spotting the right corner point in the triangle."
-  },
-  equation: {
-    targetType: "equation",
-    boundedHints: ["Hint 1: Keep both sides of the equation balanced.", "Hint 2: Check that the squared terms match the triangle relationship in the prompt."],
-    reinforcement: "Great equation choice—this is the key pattern for right triangles."
-  },
-  number: {
-    targetType: "number",
-    boundedHints: ["Hint 1: Recheck your arithmetic step by step.", "Hint 2: Compare your result to the values shown in the prompt."],
-    reinforcement: "Great computation—your number fits the triangle information."
-  },
-  segment: {
-    targetType: "segment",
-    boundedHints: ["Hint 1: Trace one side between two labeled points.", "Hint 2: Pick the side that matches the relationship named in the prompt."],
-    reinforcement: "Great side identification—you linked the labels to the right segment."
-  },
-  angle: {
-    targetType: "angle",
-    boundedHints: ["Hint 1: Focus on the angle marker at one vertex.", "Hint 2: Use the three-letter angle name order carefully."],
-    reinforcement: "Great angle reasoning—you connected the marker to the right angle name."
-  },
-  text: {
-    targetType: "response",
-    boundedHints: ["Hint 1: Use a short sentence with math words from the prompt.", "Hint 2: Name the key triangle relationship directly."],
-    reinforcement: "Great explanation—you used triangle vocabulary clearly."
-  }
-};
-
-type FeedbackNextAction = "retry" | "proceed" | "scaffold";
-
-type FeedbackMetadata = {
-  message: string;
-  hint_level: 0 | 1 | 2;
-  remediation_tag: string;
-  next_action: FeedbackNextAction;
-};
-
-type FeedbackContext = {
-  conceptId: string;
-  objectiveType: string;
-  expectedAnswer: string;
-  detectedAnswer: string | null;
-  noAnswerLeakage: boolean;
-};
-
 export const runtime = "nodejs";
 
 export async function OPTIONS() {
@@ -160,6 +111,7 @@ export async function POST(request: Request) {
       answer_schema?: string;
       grading_strategy_id?: string;
       feedback_policy_id?: string;
+      feedback_contract?: FeedbackPolicy;
       expected_answer?: {
         kind?: string;
         value?: string;
@@ -240,10 +192,10 @@ export async function POST(request: Request) {
   });
 
   const response = toLegacyResponse(gradingEnvelope, {
-    conceptId,
     objectiveType,
     expectedAnswer: expectedAnswerValue,
-    noAnswerLeakage: !/allow_answer_leak/i.test(feedbackPolicyId)
+    noAnswerLeakage: !/allow_answer_leak/i.test(feedbackPolicyId),
+    feedbackPolicy: body.assessment_contract?.feedback_contract
   });
   console.log("[API][Check][Response]", JSON.stringify(response));
   return jsonResponse(response, 200);
@@ -251,17 +203,16 @@ export async function POST(request: Request) {
 
 function toLegacyResponse(
   envelope: GradingResultEnvelope,
-  config: { conceptId: string; objectiveType: string; expectedAnswer: string; noAnswerLeakage: boolean }
+  config: { objectiveType: string; expectedAnswer: string; noAnswerLeakage: boolean; feedbackPolicy?: FeedbackPolicy }
 ) {
   const detected = envelope.detected_answer.value == null ? null : String(envelope.detected_answer.value);
   const correctness = envelope.correctness === "correct";
-  const feedback = buildStudentFeedback(envelope, {
-    conceptId: config.conceptId,
+  const feedback = buildFeedbackMetadata(envelope, {
     objectiveType: config.objectiveType,
     expectedAnswer: config.expectedAnswer,
     detectedAnswer: detected,
     noAnswerLeakage: config.noAnswerLeakage
-  });
+  }, config.feedbackPolicy);
 
   return {
     detected_segment: detected,
@@ -273,57 +224,6 @@ function toLegacyResponse(
     feedback_metadata: feedback,
     grading_result: envelope,
     correctness
-  };
-}
-
-function resolveObjectiveVocabulary(objectiveType: string, detectedKind: GradingResultEnvelope["detected_answer"]["kind"]) {
-  const normalized = objectiveType.trim().toLowerCase();
-  if (normalized.includes("vertex")) return OBJECTIVE_VOCAB.vertex;
-  if (normalized.includes("equation") || normalized.includes("pyth")) return OBJECTIVE_VOCAB.equation;
-  if (normalized.includes("number") || normalized.includes("numeric")) return OBJECTIVE_VOCAB.number;
-  if (normalized.includes("angle")) return OBJECTIVE_VOCAB.angle;
-  if (normalized.includes("side") || normalized.includes("segment") || normalized.includes("hypotenuse") || normalized.includes("leg")) return OBJECTIVE_VOCAB.segment;
-
-  if (detectedKind === "expression") return OBJECTIVE_VOCAB.equation;
-  if (detectedKind === "number") return OBJECTIVE_VOCAB.number;
-  if (detectedKind === "segment") return OBJECTIVE_VOCAB.segment;
-  if (detectedKind === "point_set") return OBJECTIVE_VOCAB.vertex;
-  if (detectedKind === "option_id") return OBJECTIVE_VOCAB.segment;
-  return OBJECTIVE_VOCAB.text;
-}
-
-function buildStudentFeedback(envelope: GradingResultEnvelope, context: FeedbackContext): FeedbackMetadata {
-  const vocab = resolveObjectiveVocabulary(context.objectiveType, envelope.detected_answer.kind);
-  const conceptLabel = context.conceptId.startsWith("tri.pyth") ? "Pythagoras" : "triangle";
-
-  if (envelope.correctness === "correct") {
-    return {
-      message: `${vocab.reinforcement} ${conceptLabel === "Pythagoras" ? "That pattern helps when you solve missing-side problems." : "You used the prompt intent correctly."}`,
-      hint_level: 0,
-      remediation_tag: "reinforce_correct_concept",
-      next_action: "proceed"
-    };
-  }
-
-  if (envelope.correctness === "ambiguous") {
-    return {
-      message: `I detected an unclear ${vocab.targetType}. Please retry with one clear ${vocab.targetType} so I can grade it accurately.`,
-      hint_level: 1,
-      remediation_tag: "ambiguous_input_retry",
-      next_action: "retry"
-    };
-  }
-
-  const detected = context.detectedAnswer ?? "no clear answer";
-  const mismatchText = `I detected ${detected}. The prompt asks for a ${vocab.targetType}, so this does not match the prompt intent.`;
-  const hints = `${vocab.boundedHints[0]} ${vocab.boundedHints[1]}`;
-  const answerLeak = context.noAnswerLeakage ? "" : ` The correct answer is ${context.expectedAnswer}.`;
-
-  return {
-    message: `${mismatchText} ${hints}${answerLeak}`,
-    hint_level: 2,
-    remediation_tag: "incorrect_with_bounded_hints",
-    next_action: envelope.correctness === "error" ? "scaffold" : "retry"
   };
 }
 

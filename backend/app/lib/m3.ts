@@ -26,6 +26,13 @@ export type QuestionSpec = {
     answer_schema: "enum" | "point_set" | "segment_set" | "numeric_with_tolerance" | "expression_equivalence" | "multi_select" | "ordered_steps";
     grading_strategy_id: "deterministic_rule" | "vision_locator" | "symbolic_equivalence" | "rubric_llm" | "hybrid";
     feedback_policy_id: string;
+    feedback_contract?: {
+      skill_focus?: string;
+      cue_types?: string[];
+      hint_templates?: string[];
+      feedback_style?: string;
+      reveal_policy?: string;
+    };
     expected_answer: { kind: string; value: string };
     options?: Array<{ id: string; text: string }>;
     numeric_rule?: { tolerance?: number };
@@ -377,6 +384,19 @@ export function validateQuestionSpec(spec: QuestionSpec, allowedInteractionTypes
     errors.push("assessment_contract_mismatch");
   }
   if (spec.response_contract.mode !== spec.assessment_contract.interaction_type) errors.push("answer_mismatch");
+
+  const feedbackContract = spec.assessment_contract.feedback_contract;
+  if (feedbackContract != null) {
+    if (feedbackContract.skill_focus != null && typeof feedbackContract.skill_focus !== "string") errors.push("assessment_contract_feedback_schema");
+    if (feedbackContract.feedback_style != null && typeof feedbackContract.feedback_style !== "string") errors.push("assessment_contract_feedback_schema");
+    if (feedbackContract.reveal_policy != null && typeof feedbackContract.reveal_policy !== "string") errors.push("assessment_contract_feedback_schema");
+    if (feedbackContract.cue_types != null && (!Array.isArray(feedbackContract.cue_types) || feedbackContract.cue_types.some((value) => typeof value !== "string"))) {
+      errors.push("assessment_contract_feedback_schema");
+    }
+    if (feedbackContract.hint_templates != null && (!Array.isArray(feedbackContract.hint_templates) || feedbackContract.hint_templates.some((value) => typeof value !== "string"))) {
+      errors.push("assessment_contract_feedback_schema");
+    }
+  }
 
   const compatibleInteractions = objectiveInteractionCompatibility[spec.assessment_contract.objective_type];
   if (compatibleInteractions && !compatibleInteractions.includes(spec.interaction_type)) {
