@@ -62,9 +62,10 @@ Write a single short feedback message for a Grade 4–6 student.
 Rules:
 - If detected_target is null OR ambiguity_score >= 0.6: ask the student to re-circle just ONE target clearly.
 - If detected_target is wrong:
-  - Explicitly say their choice is not correct for the current question.
+  - Start with encouraging tone and explicitly say their choice is not correct for the current question.
   - Mention the detected_target (e.g., "You circled CA").
-  - Provide layered hints in two short sentences aligned with the prompt/context.
+  - Provide layered hints in two short sentences aligned with the prompt/context and visual cues in the diagram when relevant (marker/symbol/label order).
+  - End with a short reflective question that helps the student self-correct.
   - Do NOT reveal the correct side label directly.
 - If detected_target is correct:
   - Praise briefly.
@@ -214,6 +215,7 @@ export async function POST(request: Request) {
     promptText,
     interactionType: responseMode,
     objectiveType,
+    promptText,
     expectedAnswer: expectedAnswerValue,
     expectedAnswerKind,
     noAnswerLeakage: !/allow_answer_leak/i.test(feedbackPolicyId),
@@ -249,6 +251,7 @@ function toLegacyResponse(
     promptText: config.promptText,
     interactionType: config.interactionType,
     objectiveType: config.objectiveType,
+    promptText: config.promptText,
     expectedAnswer: config.expectedAnswer,
     expectedAnswerKind: config.expectedAnswerKind,
     detectedAnswer: detected,
@@ -340,7 +343,8 @@ async function evaluateVisualTarget(input: {
       correctness,
       confidence,
       ambiguity_codes: reasonCodes,
-      evidence_summary: `visual_detection_class=${detectedTargetClass}; visual_detection_target=${detected ?? "null"}; expected_class=${expectedClass}; expected=${expected ?? "null"}; llm_feedback=${feedback}`
+      evidence_summary: `visual_detection_class=${detectedTargetClass}; visual_detection_target=${detected ?? "null"}; expected_class=${expectedClass}; expected=${expected ?? "null"}; llm_feedback=${feedback}`,
+      feedback_message: feedback
     };
   } catch (error) {
     console.error("[API][Check][VisualTargetError]", error);
