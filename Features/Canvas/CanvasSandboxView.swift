@@ -314,18 +314,7 @@ struct CanvasSandboxView: View {
             return
         }
 
-        if interactionType == "highlight" {
-            switch pendingAttemptStatus {
-            case .ambiguousSelection:
-                messages.append(ChatMessage(text: "Please circle one target clearly before checking.", isAssistant: true))
-                return
-            case .none:
-                messages.append(ChatMessage(text: "Please circle one side before checking.", isAssistant: true))
-                return
-            case .selectedSegment:
-                break
-            }
-        }
+        // Let the vision pipeline gate and respond; don't block here.
 
         isCheckingAI = true
 
