@@ -622,3 +622,15 @@
   1. POST existing highlight, multiple-choice, and numeric `/api/triangles/check` payloads without `assessment_contract.feedback_contract`; verify response shape and behavior remain unchanged.
   2. POST `/api/triangles/check` payloads with minimal `assessment_contract.feedback_contract` (for example only `feedback_style` and `reveal_policy`) and verify grading still succeeds.
   3. Verify `student_feedback` and `feedback_metadata` are present for correct, incorrect, and ambiguous outcomes.
+
+**Implementation notes (2026-03-06 — Feedback diagnose/compose staging + cue-based generic hints):**
+- Files touched:
+  - `backend/app/lib/feedbackEngine.ts`
+  - `backend/app/api/triangles/check/route.ts`
+  - `PLANS.md`
+- Manual test steps:
+  1. Submit an incorrect but type-correct answer (for example expected segment label, submitted different segment label); verify `feedback_metadata.diagnosis_category` is `wrong_target`, not `type_mismatch`.
+  2. Submit a true type mismatch (for example expected numeric answer, submitted expression/option); verify `feedback_metadata.diagnosis_category` is `type_mismatch`.
+  3. Submit an ambiguous/unclear response; verify `feedback_metadata.diagnosis_category` is `ambiguous_input` and response guidance prioritizes retry clarity.
+  4. Remove/omit `feedback_contract.cue_types` and partial contract fields; verify deterministic fallback hints still appear with stable response shape.
+  5. Confirm no direct-answer leakage unless reveal policy explicitly allows it.
