@@ -54,7 +54,13 @@ final class TriangleAIChecker {
             "expected_answer_value": assessmentContract.expectedAnswer.value,
             "submitted_choice_id": submittedChoiceId,
             "submitted_numeric_value": submittedNumericValue,
-            "assessment_contract": assessmentContractDictionary(from: assessmentContract)
+            "assessment_contract": assessmentContractDictionary(from: assessmentContract),
+            "feedback_contract": feedbackContractDictionary(from: assessmentContract.feedbackContract),
+            "question_context": questionContextDictionary(
+                promptText: promptText,
+                assessmentContract: assessmentContract,
+                rightAngleAt: rightAngleAt
+            )
         ]
         let requestData = try? JSONSerialization.data(withJSONObject: payload, options: [])
         request.httpBody = requestData
@@ -73,6 +79,47 @@ final class TriangleAIChecker {
         }
     }
 
+
+
+
+    private func feedbackContractDictionary(from contract: FeedbackContract?) -> [String: Any]? {
+        guard let contract else { return nil }
+        var result: [String: Any] = [:]
+
+        if let skillFocus = contract.skillFocus {
+            result["skill_focus"] = skillFocus
+        }
+        if let cueTypes = contract.cueTypes {
+            result["cue_types"] = cueTypes
+        }
+        if let hintTemplates = contract.hintTemplates {
+            result["hint_templates"] = hintTemplates
+        }
+        if let feedbackStyle = contract.feedbackStyle {
+            result["feedback_style"] = feedbackStyle
+        }
+        if let revealPolicy = contract.revealPolicy {
+            result["reveal_policy"] = revealPolicy
+        }
+
+        return result.isEmpty ? nil : result
+    }
+
+    private func questionContextDictionary(
+        promptText: String,
+        assessmentContract: AssessmentContract,
+        rightAngleAt: String?
+    ) -> [String: Any] {
+        [
+            "prompt_text": promptText,
+            "interaction_type": assessmentContract.interactionType,
+            "objective_type": assessmentContract.objectiveType,
+            "expected_answer": assessmentContract.expectedAnswer.value,
+            "expected_answer_kind": assessmentContract.expectedAnswer.kind,
+            "feedback_policy_id": assessmentContract.feedbackPolicyId,
+            "diagram_metadata": ["right_angle_at": rightAngleAt ?? NSNull()]
+        ]
+    }
 
     private func assessmentContractDictionary(from contract: AssessmentContract) -> [String: Any] {
         var result: [String: Any] = [
