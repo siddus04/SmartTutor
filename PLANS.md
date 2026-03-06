@@ -600,3 +600,14 @@
   2. Trigger generation with `answer_schema="enum"` + `grading_strategy_id="symbolic_equivalence"` and verify validation rejects with `strategy_schema_mismatch`.
   3. Trigger generation for `tri.pyth.equation_a2_b2_c2` with disallowed strategy (for example `vision_locator`) and verify validation rejects with `concept_policy_strategy_mismatch`.
   4. Run benchmark harness against labeled cases (correct/incorrect/ambiguous/adversarial), including symbolic equation variants, numeric tolerance boundaries, and visual target classes; verify metrics output includes accuracy by concept/objective, ambiguity FP/FN, feedback quality flags, and strategy regression alerts.
+
+**Implementation notes (2026-03-06 — Canvas submission-state gating for ambiguous selections):**
+- Files touched:
+  - `Features/Canvas/CanvasSandboxView.swift`
+  - `PLANS.md`
+- Manual test steps:
+  1. Load a highlight-style question and draw an ambiguous loop that overlaps multiple segments; tap **Check** and verify no AI call starts (no thinking message), and chat shows a local pre-check message asking for one clear target.
+  2. Load a highlight-style question and tap **Check** without circling a side; verify chat shows a local pre-check message asking to circle one side before checking.
+  3. Circle one clear segment and tap **Check**; verify normal AI check flow still runs.
+  4. Trigger a new question and verify prior selection/ambiguity submission state is reset.
+  5. Submit an incorrect or ambiguous visual check that clears the canvas; verify submission state is reset so the next **Check** requires a fresh circle.

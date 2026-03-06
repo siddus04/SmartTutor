@@ -10,6 +10,12 @@ import PencilKit
 #endif
 
 struct CanvasSandboxView: View {
+    private enum PendingAttemptStatus: Equatable {
+        case none
+        case selectedSegment(String)
+        case ambiguousSelection
+    }
+
     @EnvironmentObject private var sessionStore: LearnerSessionStore
     private let accentColor = Color(red: 0.32, green: 0.64, blue: 0.66)
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -20,6 +26,7 @@ struct CanvasSandboxView: View {
     @State private var numericSubmissionValue: String = ""
     @State private var messages: [ChatMessage] = []
     @State private var selectionDebugInfo: SelectionDebugInfo?
+    @State private var pendingAttemptStatus: PendingAttemptStatus = .none
     @StateObject private var canvasController = CanvasController()
     @State private var isCheckingAI = false
     @State private var thinkingMessageID: UUID?
@@ -57,6 +64,7 @@ struct CanvasSandboxView: View {
                                 canvasResetID = UUID()
                                 selectedSegment = nil
                                 selectionDebugInfo = nil
+                                pendingAttemptStatus = .none
                             }
                         )
                             .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 360)
@@ -68,12 +76,13 @@ struct CanvasSandboxView: View {
                             selectedSegment: selectedSegment,
                             onSegmentSelected: { segment in
                                 selectedSegment = segment
+                                pendingAttemptStatus = segment.map { .selectedSegment($0) } ?? .none
                             },
                             onCheckAnswer: {
                                 handleCheckAnswer()
                             },
                             onAmbiguousSelection: {
-                                messages.append(ChatMessage(text: "I can’t tell which side you circled — try circling one side properly.", isAssistant: true))
+                                pendingAttemptStatus = .ambiguousSelection
                             },
                             onDebugUpdate: { info in
                                 selectionDebugInfo = info
@@ -96,6 +105,7 @@ struct CanvasSandboxView: View {
                                 canvasResetID = UUID()
                                 selectedSegment = nil
                                 selectionDebugInfo = nil
+                                pendingAttemptStatus = .none
                             }
                         )
                             .frame(minWidth: 280, idealWidth: 320, maxWidth: 360)
@@ -107,12 +117,13 @@ struct CanvasSandboxView: View {
                             selectedSegment: selectedSegment,
                             onSegmentSelected: { segment in
                                 selectedSegment = segment
+                                pendingAttemptStatus = segment.map { .selectedSegment($0) } ?? .none
                             },
                             onCheckAnswer: {
                                 handleCheckAnswer()
                             },
                             onAmbiguousSelection: {
-                                messages.append(ChatMessage(text: "I can’t tell which side you circled — try circling one side properly.", isAssistant: true))
+                                pendingAttemptStatus = .ambiguousSelection
                             },
                             onDebugUpdate: { info in
                                 selectionDebugInfo = info
@@ -302,6 +313,20 @@ struct CanvasSandboxView: View {
             messages.append(ChatMessage(text: "No question to check yet.", isAssistant: true))
             return
         }
+
+        if interactionType == "highlight" {
+            switch pendingAttemptStatus {
+            case .ambiguousSelection:
+                messages.append(ChatMessage(text: "Please circle one target clearly before checking.", isAssistant: true))
+                return
+            case .none:
+                messages.append(ChatMessage(text: "Please circle one side before checking.", isAssistant: true))
+                return
+            case .selectedSegment:
+                break
+            }
+        }
+
         isCheckingAI = true
 
         let thinking = ChatMessage(text: "Thinking.", isAssistant: true)
@@ -339,7 +364,7 @@ struct CanvasSandboxView: View {
                     messages.append(ChatMessage(text: followUp, isAssistant: true))
                     if !isCorrect && isVisualMode {
                         canvasController.clear()
-                        selectedSegment = nil
+                        clearCurrentVisualAttempt()
                     }
                 }
                 await MainActor.run {
@@ -350,7 +375,7 @@ struct CanvasSandboxView: View {
                     messages.append(ChatMessage(text: "I can’t tell which side you circled—try circling just ONE side clearly.", isAssistant: true))
                     if isVisualMode {
                         canvasController.clear()
-                        selectedSegment = nil
+                        clearCurrentVisualAttempt()
                     }
                     updateMasteryAfterCheck(expected: expected, detected: result.detectedSegment, ambiguity: result.ambiguityScore)
                 }
@@ -368,6 +393,13 @@ struct CanvasSandboxView: View {
                 isCheckingAI = false
             }
         }
+    }
+
+    @MainActor
+    private func clearCurrentVisualAttempt() {
+        selectedSegment = nil
+        pendingAttemptStatus = .none
+        selectionDebugInfo = nil
     }
 
     private func isSubmissionCorrect(base: TriangleBase, result: TriangleAICheckResult) -> Bool {
