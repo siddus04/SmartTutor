@@ -668,3 +668,12 @@
   2. Submit check requests without `feedback_contract` and confirm feedback still returns via policy/engine fallback path.
   3. Submit check requests with `question_context` and verify route prioritizes context fields (prompt/objective/expected answer) while remaining backward compatible with legacy top-level fields when context is absent.
   4. Run grading benchmark harness and confirm diagnosis accuracy plus feedback quality assertions (context cue usage, progressive hinting, no direct-answer leakage) pass across `identify`, `compute`, and `select_equation` objective types.
+
+---
+**Implementation notes (2026-03-06 — Vercel build compile hotfix):**
+- Files touched:
+  - `backend/app/api/triangles/check/route.ts`
+- Manual test steps:
+  1. Run `npx next build` in `backend/` and verify type-check + build complete successfully.
+  2. Verify the `toLegacyResponse` call and `buildFeedbackMetadata` config no longer duplicate `promptText` object keys.
+  3. Re-run the failing check route compile path (`/api/triangles/check`) as part of production build output and confirm it is emitted.
