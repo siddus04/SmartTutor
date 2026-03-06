@@ -20,6 +20,8 @@ struct TriangleBase: Codable {
     let interactionType: String?
     let responseMode: String?
     let promptText: String?
+    let hintText: String?
+    let realWorldText: String?
     let assessmentContract: AssessmentContract?
     let responseContract: ResponseContract?
 
@@ -33,6 +35,8 @@ struct TriangleBase: Codable {
         case interactionType = "interaction_type"
         case responseMode = "response_mode"
         case promptText = "prompt_text"
+        case hintText = "hint_text"
+        case realWorldText = "real_world_text"
         case assessmentContract = "assessment_contract"
         case responseContract = "response_contract"
     }
@@ -47,6 +51,8 @@ struct TriangleBase: Codable {
         interactionType: String? = nil,
         responseMode: String? = nil,
         promptText: String? = nil,
+        hintText: String? = nil,
+        realWorldText: String? = nil,
         assessmentContract: AssessmentContract? = nil,
         responseContract: ResponseContract? = nil
     ) {
@@ -59,6 +65,8 @@ struct TriangleBase: Codable {
         self.interactionType = interactionType
         self.responseMode = responseMode
         self.promptText = promptText
+        self.hintText = hintText
+        self.realWorldText = realWorldText
         self.assessmentContract = assessmentContract
         self.responseContract = responseContract
     }
