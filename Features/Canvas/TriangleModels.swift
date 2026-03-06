@@ -161,6 +161,7 @@ struct AssessmentContract: Codable {
     let answerSchema: String
     let gradingStrategyId: String
     let feedbackPolicyId: String
+    let feedbackContract: FeedbackContract?
     let expectedAnswer: SpecAnswer
     let options: [ResponseOption]?
     let numericRule: NumericRule?
@@ -173,9 +174,52 @@ struct AssessmentContract: Codable {
         case answerSchema = "answer_schema"
         case gradingStrategyId = "grading_strategy_id"
         case feedbackPolicyId = "feedback_policy_id"
+        case feedbackContract = "feedback_contract"
         case expectedAnswer = "expected_answer"
         case options
         case numericRule = "numeric_rule"
+    }
+
+    init(
+        schemaVersion: String,
+        conceptId: String,
+        interactionType: String,
+        objectiveType: String,
+        answerSchema: String,
+        gradingStrategyId: String,
+        feedbackPolicyId: String,
+        feedbackContract: FeedbackContract? = nil,
+        expectedAnswer: SpecAnswer,
+        options: [ResponseOption]? = nil,
+        numericRule: NumericRule? = nil
+    ) {
+        self.schemaVersion = schemaVersion
+        self.conceptId = conceptId
+        self.interactionType = interactionType
+        self.objectiveType = objectiveType
+        self.answerSchema = answerSchema
+        self.gradingStrategyId = gradingStrategyId
+        self.feedbackPolicyId = feedbackPolicyId
+        self.feedbackContract = feedbackContract
+        self.expectedAnswer = expectedAnswer
+        self.options = options
+        self.numericRule = numericRule
+    }
+}
+
+struct FeedbackContract: Codable {
+    let skillFocus: String?
+    let cueTypes: [String]?
+    let hintTemplates: [String]?
+    let feedbackStyle: String?
+    let revealPolicy: String?
+
+    enum CodingKeys: String, CodingKey {
+        case skillFocus = "skill_focus"
+        case cueTypes = "cue_types"
+        case hintTemplates = "hint_templates"
+        case feedbackStyle = "feedback_style"
+        case revealPolicy = "reveal_policy"
     }
 }
 

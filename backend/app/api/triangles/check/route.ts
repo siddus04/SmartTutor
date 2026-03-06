@@ -103,6 +103,19 @@ export async function POST(request: Request) {
     submitted_numeric_value?: string;
     submitted_expression?: string;
     submitted_text?: string;
+    feedback_contract?: FeedbackPolicy;
+    question_context?: {
+      prompt_text?: string;
+      hint_text?: string;
+      explanation_text?: string;
+      real_world_text?: string;
+      interaction_type?: string;
+      objective_type?: string;
+      expected_answer?: string;
+      expected_answer_kind?: string;
+      feedback_policy_id?: string;
+      diagram_metadata?: Record<string, unknown>;
+    };
     assessment_contract?: {
       schema_version?: string;
       concept_id?: string;
@@ -133,16 +146,22 @@ export async function POST(request: Request) {
   }
 
   const conceptId = body.concept_id ?? "";
-  const promptText = body.prompt_text ?? "";
-  const interactionType = body.interaction_type ?? "highlight";
+  const context = body.question_context;
+  const promptText = context?.prompt_text ?? body.prompt_text ?? "";
+  const interactionType = context?.interaction_type ?? body.interaction_type ?? "highlight";
   const responseMode = body.assessment_contract?.interaction_type ?? body.response_mode ?? interactionType;
   const rightAngleAt = body.right_angle_at ?? null;
   const mergedImagePath = body.merged_image_path ?? null;
   const combinedBase64 = body.combined_png_base64 ?? "";
-  const expectedAnswerValue = body.assessment_contract?.expected_answer?.value ?? body.expected_answer_value ?? "AB";
-  const expectedAnswerKind = body.assessment_contract?.expected_answer?.kind ?? null;
-  const objectiveType = body.assessment_contract?.objective_type ?? "";
-  const feedbackPolicyId = body.assessment_contract?.feedback_policy_id ?? "";
+  const expectedAnswerValue = context?.expected_answer
+    ?? body.assessment_contract?.expected_answer?.value
+    ?? body.expected_answer_value
+    ?? "AB";
+  const expectedAnswerKind = context?.expected_answer_kind
+    ?? body.assessment_contract?.expected_answer?.kind
+    ?? null;
+  const objectiveType = context?.objective_type ?? body.assessment_contract?.objective_type ?? "";
+  const feedbackPolicyId = context?.feedback_policy_id ?? body.assessment_contract?.feedback_policy_id ?? "";
 
   const imageHash = crypto.createHash("sha256").update(combinedBase64).digest("hex").slice(0, 12);
   console.log("[API][Check][Request]", JSON.stringify({
@@ -199,7 +218,11 @@ export async function POST(request: Request) {
     expectedAnswerKind,
     noAnswerLeakage: !/allow_answer_leak/i.test(feedbackPolicyId),
     feedbackPolicyId,
-    feedbackPolicy: body.assessment_contract?.feedback_contract
+    feedbackPolicy: body.question_context
+      ? (body.feedback_contract ?? body.assessment_contract?.feedback_contract)
+      : body.assessment_contract?.feedback_contract,
+    explanationText: body.question_context?.explanation_text ?? null,
+    diagramMetadata: body.question_context?.diagram_metadata ?? null
   });
   console.log("[API][Check][Response]", JSON.stringify(response));
   return jsonResponse(response, 200);
@@ -216,6 +239,8 @@ function toLegacyResponse(
     noAnswerLeakage: boolean;
     feedbackPolicyId: string;
     feedbackPolicy?: FeedbackPolicy;
+    explanationText?: string | null;
+    diagramMetadata?: Record<string, unknown> | null;
   }
 ) {
   const detected = envelope.detected_answer.value == null ? null : String(envelope.detected_answer.value);
@@ -229,6 +254,8 @@ function toLegacyResponse(
     detectedAnswer: detected,
     detectedAnswerKind: envelope.detected_answer.kind,
     feedbackPolicyId: config.feedbackPolicyId,
+    explanationText: config.explanationText,
+    diagramMetadata: config.diagramMetadata,
     noAnswerLeakage: config.noAnswerLeakage
   }, config.feedbackPolicy);
 
