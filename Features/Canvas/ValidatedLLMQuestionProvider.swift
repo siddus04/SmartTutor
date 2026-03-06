@@ -129,9 +129,7 @@ enum TriangleAdapter {
             bundleId: spec.questionId,
             base: TriangleBase(
                 tutorMessages: [
-                    TriangleTutorMessage(role: "assistant", text: spec.prompt),
-                    TriangleTutorMessage(role: "assistant", text: spec.hint),
-                    TriangleTutorMessage(role: "assistant", text: spec.realWorldConnection)
+                    TriangleTutorMessage(role: "assistant", text: spec.prompt)
                 ],
                 diagramSpec: TriangleDiagramSpec(
                     points: points,
@@ -146,6 +144,8 @@ enum TriangleAdapter {
                 interactionType: spec.assessmentContract.interactionType,
                 responseMode: spec.assessmentContract.interactionType,
                 promptText: spec.prompt,
+                hintText: spec.hint,
+                realWorldText: spec.realWorldConnection,
                 assessmentContract: spec.assessmentContract,
                 responseContract: ResponseContract(mode: spec.assessmentContract.interactionType, answer: spec.assessmentContract.expectedAnswer, options: spec.assessmentContract.options, numericRule: spec.assessmentContract.numericRule)
             )

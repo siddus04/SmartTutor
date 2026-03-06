@@ -16,9 +16,7 @@ struct StubQuestionProvider: TriangleQuestionProviding {
             bundleId: "stub.\(conceptId).d\(cappedDifficulty).\(intent.rawValue)",
             base: TriangleBase(
                 tutorMessages: [
-                    TriangleTutorMessage(role: "assistant", text: template.prompt),
-                    TriangleTutorMessage(role: "assistant", text: template.hint),
-                    TriangleTutorMessage(role: "assistant", text: template.realWorld)
+                    TriangleTutorMessage(role: "assistant", text: template.prompt)
                 ],
                 diagramSpec: TriangleDiagramSpec(
                     points: [
@@ -37,6 +35,8 @@ struct StubQuestionProvider: TriangleQuestionProviding {
                 interactionType: interactionType,
                 responseMode: interactionType,
                 promptText: template.prompt,
+                hintText: template.hint,
+                realWorldText: template.realWorld,
                 assessmentContract: assessmentContract,
                 responseContract: responseContract(from: assessmentContract)
             )

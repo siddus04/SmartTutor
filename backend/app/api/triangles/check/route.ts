@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import crypto from "crypto";
 import { GradingResultEnvelope, gradeWithRouter } from "../../../lib/gradingRouter";
 import { DIAGRAM_TARGET_CLASSES, DiagramTargetClass, normalizeDiagramTargetClass } from "../../../lib/diagramTargets";
-import { buildStudentFeedback, FeedbackMetadata } from "../../../lib/feedbackEngine";
+import { buildFeedbackMetadata, FeedbackPolicy } from "../../../lib/feedbackEngine";
 
 const DIAGRAM_TARGET_LABELS = DIAGRAM_TARGET_CLASSES.join(", ");
 
@@ -84,39 +84,6 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization"
 };
 
-const OBJECTIVE_VOCAB: Record<string, { targetType: string; boundedHints: [string, string]; reinforcement: string }> = {
-  vertex: {
-    targetType: "vertex",
-    boundedHints: ["Hint 1: Look for the small square angle marker in the triangle.", "Hint 2: The right-angle vertex is the corner that marker touches."],
-    reinforcement: "Nice work spotting the right corner point in the triangle."
-  },
-  equation: {
-    targetType: "equation",
-    boundedHints: ["Hint 1: Keep both sides of the equation balanced.", "Hint 2: Check that the squared terms match the triangle relationship in the prompt."],
-    reinforcement: "Great equation choice—this is the key pattern for right triangles."
-  },
-  number: {
-    targetType: "number",
-    boundedHints: ["Hint 1: Recheck your arithmetic step by step.", "Hint 2: Compare your result to the values shown in the prompt."],
-    reinforcement: "Great computation—your number fits the triangle information."
-  },
-  segment: {
-    targetType: "segment",
-    boundedHints: ["Hint 1: Trace one side between two labeled points.", "Hint 2: Pick the side that matches the relationship named in the prompt."],
-    reinforcement: "Great side identification—you linked the labels to the right segment."
-  },
-  angle: {
-    targetType: "angle",
-    boundedHints: ["Hint 1: Focus on the angle marker at one vertex.", "Hint 2: Use the three-letter angle name order carefully."],
-    reinforcement: "Great angle reasoning—you connected the marker to the right angle name."
-  },
-  text: {
-    targetType: "response",
-    boundedHints: ["Hint 1: Use a short sentence with math words from the prompt.", "Hint 2: Name the key triangle relationship directly."],
-    reinforcement: "Great explanation—you used triangle vocabulary clearly."
-  }
-};
-
 export const runtime = "nodejs";
 
 export async function OPTIONS() {
@@ -137,6 +104,19 @@ export async function POST(request: Request) {
     submitted_numeric_value?: string;
     submitted_expression?: string;
     submitted_text?: string;
+    feedback_contract?: FeedbackPolicy;
+    question_context?: {
+      prompt_text?: string;
+      hint_text?: string;
+      explanation_text?: string;
+      real_world_text?: string;
+      interaction_type?: string;
+      objective_type?: string;
+      expected_answer?: string;
+      expected_answer_kind?: string;
+      feedback_policy_id?: string;
+      diagram_metadata?: Record<string, unknown>;
+    };
     assessment_contract?: {
       schema_version?: string;
       concept_id?: string;
@@ -145,6 +125,7 @@ export async function POST(request: Request) {
       answer_schema?: string;
       grading_strategy_id?: string;
       feedback_policy_id?: string;
+      feedback_contract?: FeedbackPolicy;
       expected_answer?: {
         kind?: string;
         value?: string;
@@ -166,16 +147,22 @@ export async function POST(request: Request) {
   }
 
   const conceptId = body.concept_id ?? "";
-  const promptText = body.prompt_text ?? "";
-  const interactionType = body.interaction_type ?? "highlight";
+  const context = body.question_context;
+  const promptText = context?.prompt_text ?? body.prompt_text ?? "";
+  const interactionType = context?.interaction_type ?? body.interaction_type ?? "highlight";
   const responseMode = body.assessment_contract?.interaction_type ?? body.response_mode ?? interactionType;
   const rightAngleAt = body.right_angle_at ?? null;
   const mergedImagePath = body.merged_image_path ?? null;
   const combinedBase64 = body.combined_png_base64 ?? "";
-  const expectedAnswerValue = body.assessment_contract?.expected_answer?.value ?? body.expected_answer_value ?? "AB";
-  const expectedAnswerKind = body.assessment_contract?.expected_answer?.kind ?? null;
-  const objectiveType = body.assessment_contract?.objective_type ?? "";
-  const feedbackPolicyId = body.assessment_contract?.feedback_policy_id ?? "";
+  const expectedAnswerValue = context?.expected_answer
+    ?? body.assessment_contract?.expected_answer?.value
+    ?? body.expected_answer_value
+    ?? "AB";
+  const expectedAnswerKind = context?.expected_answer_kind
+    ?? body.assessment_contract?.expected_answer?.kind
+    ?? null;
+  const objectiveType = context?.objective_type ?? body.assessment_contract?.objective_type ?? "";
+  const feedbackPolicyId = context?.feedback_policy_id ?? body.assessment_contract?.feedback_policy_id ?? "";
 
   const imageHash = crypto.createHash("sha256").update(combinedBase64).digest("hex").slice(0, 12);
   console.log("[API][Check][Request]", JSON.stringify({
@@ -225,11 +212,19 @@ export async function POST(request: Request) {
   });
 
   const response = toLegacyResponse(gradingEnvelope, {
-    conceptId,
+    promptText,
+    interactionType: responseMode,
     objectiveType,
     promptText,
     expectedAnswer: expectedAnswerValue,
-    noAnswerLeakage: !/allow_answer_leak/i.test(feedbackPolicyId)
+    expectedAnswerKind,
+    noAnswerLeakage: !/allow_answer_leak/i.test(feedbackPolicyId),
+    feedbackPolicyId,
+    feedbackPolicy: body.question_context
+      ? (body.feedback_contract ?? body.assessment_contract?.feedback_contract)
+      : body.assessment_contract?.feedback_contract,
+    explanationText: body.question_context?.explanation_text ?? null,
+    diagramMetadata: body.question_context?.diagram_metadata ?? null
   });
   console.log("[API][Check][Response]", JSON.stringify(response));
   return jsonResponse(response, 200);
@@ -237,18 +232,35 @@ export async function POST(request: Request) {
 
 function toLegacyResponse(
   envelope: GradingResultEnvelope,
-  config: { conceptId: string; objectiveType: string; promptText: string; expectedAnswer: string; noAnswerLeakage: boolean }
+  config: {
+    promptText: string;
+    interactionType: string;
+    objectiveType: string;
+    expectedAnswer: string;
+    expectedAnswerKind: string | null;
+    noAnswerLeakage: boolean;
+    feedbackPolicyId: string;
+    feedbackPolicy?: FeedbackPolicy;
+    explanationText?: string | null;
+    diagramMetadata?: Record<string, unknown> | null;
+  }
 ) {
   const detected = envelope.detected_answer.value == null ? null : String(envelope.detected_answer.value);
   const correctness = envelope.correctness === "correct";
-  const feedback = buildStudentFeedback(envelope, {
-    conceptId: config.conceptId,
+  const feedback = buildFeedbackMetadata(envelope, {
+    promptText: config.promptText,
+    interactionType: config.interactionType,
     objectiveType: config.objectiveType,
     promptText: config.promptText,
     expectedAnswer: config.expectedAnswer,
+    expectedAnswerKind: config.expectedAnswerKind,
     detectedAnswer: detected,
+    detectedAnswerKind: envelope.detected_answer.kind,
+    feedbackPolicyId: config.feedbackPolicyId,
+    explanationText: config.explanationText,
+    diagramMetadata: config.diagramMetadata,
     noAnswerLeakage: config.noAnswerLeakage
-  }, resolveObjectiveVocabulary(config.objectiveType, envelope.detected_answer.kind));
+  }, config.feedbackPolicy);
 
   return {
     detected_segment: detected,
@@ -261,22 +273,6 @@ function toLegacyResponse(
     grading_result: envelope,
     correctness
   };
-}
-
-function resolveObjectiveVocabulary(objectiveType: string, detectedKind: GradingResultEnvelope["detected_answer"]["kind"]) {
-  const normalized = objectiveType.trim().toLowerCase();
-  if (normalized.includes("vertex")) return OBJECTIVE_VOCAB.vertex;
-  if (normalized.includes("equation") || normalized.includes("pyth")) return OBJECTIVE_VOCAB.equation;
-  if (normalized.includes("number") || normalized.includes("numeric")) return OBJECTIVE_VOCAB.number;
-  if (normalized.includes("angle")) return OBJECTIVE_VOCAB.angle;
-  if (normalized.includes("side") || normalized.includes("segment") || normalized.includes("hypotenuse") || normalized.includes("leg")) return OBJECTIVE_VOCAB.segment;
-
-  if (detectedKind === "expression") return OBJECTIVE_VOCAB.equation;
-  if (detectedKind === "number") return OBJECTIVE_VOCAB.number;
-  if (detectedKind === "segment") return OBJECTIVE_VOCAB.segment;
-  if (detectedKind === "point_set") return OBJECTIVE_VOCAB.vertex;
-  if (detectedKind === "option_id") return OBJECTIVE_VOCAB.segment;
-  return OBJECTIVE_VOCAB.text;
 }
 
 async function evaluateVisualTarget(input: {

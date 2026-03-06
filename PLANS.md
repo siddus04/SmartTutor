@@ -633,3 +633,38 @@
   3. Disable or fail feedback model call path and verify deterministic fallback feedback still works with cue-aware hints derived from prompt text.
   4. POST ambiguous visual input and verify retry messaging still asks for one clear target.
   5. POST correct responses across enum/numeric/highlight and verify existing reinforcement/proceed behavior remains stable.
+**Implementation notes (2026-03-06 — Optional assessment feedback contract + reusable feedback engine):**
+- Files touched:
+  - `backend/app/lib/m3.ts`
+  - `backend/app/lib/feedbackEngine.ts` (new)
+  - `backend/app/api/triangles/check/route.ts`
+  - `PLANS.md`
+- Manual test steps:
+  1. POST existing highlight, multiple-choice, and numeric `/api/triangles/check` payloads without `assessment_contract.feedback_contract`; verify response shape and behavior remain unchanged.
+  2. POST `/api/triangles/check` payloads with minimal `assessment_contract.feedback_contract` (for example only `feedback_style` and `reveal_policy`) and verify grading still succeeds.
+  3. Verify `student_feedback` and `feedback_metadata` are present for correct, incorrect, and ambiguous outcomes.
+
+**Implementation notes (2026-03-06 — Feedback diagnose/compose staging + cue-based generic hints):**
+- Files touched:
+  - `backend/app/lib/feedbackEngine.ts`
+  - `backend/app/api/triangles/check/route.ts`
+  - `PLANS.md`
+- Manual test steps:
+  1. Submit an incorrect but type-correct answer (for example expected segment label, submitted different segment label); verify `feedback_metadata.diagnosis_category` is `wrong_target`, not `type_mismatch`.
+  2. Submit a true type mismatch (for example expected numeric answer, submitted expression/option); verify `feedback_metadata.diagnosis_category` is `type_mismatch`.
+  3. Submit an ambiguous/unclear response; verify `feedback_metadata.diagnosis_category` is `ambiguous_input` and response guidance prioritizes retry clarity.
+  4. Remove/omit `feedback_contract.cue_types` and partial contract fields; verify deterministic fallback hints still appear with stable response shape.
+  5. Confirm no direct-answer leakage unless reveal policy explicitly allows it.
+
+**Implementation notes (2026-03-06 — feedback contract propagation + question-context-first check routing + benchmark quality gates):**
+- Files touched:
+  - `Features/Canvas/TriangleModels.swift`
+  - `Features/Canvas/TriangleAIChecker.swift`
+  - `backend/app/api/triangles/check/route.ts`
+  - `backend/app/lib/gradingBenchmark.ts`
+  - `PLANS.md`
+- Manual test steps:
+  1. Run end-to-end incorrect submissions for highlight, multiple-choice, and numeric_input interactions; verify returned hints reference the original prompt/question cues rather than generic concept-only text.
+  2. Submit check requests without `feedback_contract` and confirm feedback still returns via policy/engine fallback path.
+  3. Submit check requests with `question_context` and verify route prioritizes context fields (prompt/objective/expected answer) while remaining backward compatible with legacy top-level fields when context is absent.
+  4. Run grading benchmark harness and confirm diagnosis accuracy plus feedback quality assertions (context cue usage, progressive hinting, no direct-answer leakage) pass across `identify`, `compute`, and `select_equation` objective types.
