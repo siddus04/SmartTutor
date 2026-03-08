@@ -31,6 +31,7 @@ final class TriangleAIChecker {
         let result: TriangleAICheckResult
         let statusCode: Int?
         let didFallback: Bool
+        let errorMessage: String?
     }
 
     func check(
@@ -49,7 +50,7 @@ final class TriangleAIChecker {
         mergedImagePath: String?
     ) async -> ResultEnvelope {
         guard let url = URL(string: AppConfig.aiCheckBaseURL + "api/triangles/grade") else {
-            return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: nil, didFallback: true)
+            return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: nil, didFallback: true, errorMessage: "Invalid URL")
         }
 
         var request = URLRequest(url: url)
@@ -84,11 +85,18 @@ final class TriangleAIChecker {
             let statusCode = (response as? HTTPURLResponse)?.statusCode
             logResponse(statusCode: statusCode, responseData: data)
             if let decoded = try? JSONDecoder().decode(TriangleAICheckResult.self, from: data) {
-                return ResultEnvelope(result: decoded, statusCode: statusCode, didFallback: false)
+                return ResultEnvelope(result: decoded, statusCode: statusCode, didFallback: false, errorMessage: nil)
             }
-            return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: statusCode, didFallback: true)
+            if let raw = String(data: data, encoding: .utf8) {
+                print("[AICheck][DecodeFailed] status=\(statusCode.map(String.init) ?? "nil") raw=\(raw)")
+                return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: statusCode, didFallback: true, errorMessage: "Decode failed raw=\(raw)")
+            } else {
+                print("[AICheck][DecodeFailed] status=\(statusCode.map(String.init) ?? "nil") bytes=\(data.count)")
+                return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: statusCode, didFallback: true, errorMessage: "Decode failed bytes=\(data.count)")
+            }
         } catch {
-            return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: nil, didFallback: true)
+            print("[AICheck][NetworkError] \(error)")
+            return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: nil, didFallback: true, errorMessage: "Network error: \(error)")
         }
     }
 

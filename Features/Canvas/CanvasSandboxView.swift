@@ -345,7 +345,9 @@ struct CanvasSandboxView: View {
                     messages.append(ChatMessage(text: "(AI check failed) Please try again.", isAssistant: true))
                     isCheckingAI = false
                 }
-                appendLog("AI check failed or fallback used.")
+                let statusText = envelope?.statusCode.map(String.init) ?? "nil"
+                let errorText = envelope?.errorMessage ?? "nil"
+                appendLog("AI check failed or fallback used. status=\(statusText) error=\(errorText)")
                 return
             }
 

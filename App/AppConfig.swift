@@ -1,16 +1,22 @@
 import Foundation
 
 enum AppConfig {
+    private static func normalizedBaseURL(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+        return trimmed.hasSuffix("/") ? trimmed : "\(trimmed)/"
+    }
+
     static let baseURL: String = {
         if let value = ProcessInfo.processInfo.environment["BASE_URL"], !value.isEmpty {
-            return value
+            return normalizedBaseURL(value)
         }
-        return "http://localhost:8000"
+        return "http://localhost:8000/"
     }()
 
     static let aiCheckBaseURL: String = {
         if let value = ProcessInfo.processInfo.environment["AI_CHECK_BASE_URL"], !value.isEmpty {
-            return value
+            return normalizedBaseURL(value)
         }
         return baseURL
     }()
