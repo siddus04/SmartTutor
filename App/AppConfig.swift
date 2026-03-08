@@ -8,7 +8,12 @@ enum AppConfig {
         return "http://localhost:8000"
     }()
 
-    static let aiCheckBaseURL: String = "https://smart-tutor-chi.vercel.app/"
+    static let aiCheckBaseURL: String = {
+        if let value = ProcessInfo.processInfo.environment["AI_CHECK_BASE_URL"], !value.isEmpty {
+            return value
+        }
+        return baseURL
+    }()
 
 
     // M2 deterministic mastery settings

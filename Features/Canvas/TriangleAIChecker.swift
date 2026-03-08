@@ -2,17 +2,27 @@ import Foundation
 
 struct TriangleAICheckResult: Codable {
     let detectedSegment: String?
+    let detectedTargetClass: String?
     let ambiguityScore: Double
     let confidence: Double
     let reasonCodes: [String]
     let studentFeedback: String
+    let correctness: String?
+    let hints: [String]?
+    let revealAnswer: Bool?
+    let correctAnswerExplain: String?
 
     enum CodingKeys: String, CodingKey {
         case detectedSegment = "detected_segment"
+        case detectedTargetClass = "detected_target_class"
         case ambiguityScore = "ambiguity_score"
         case confidence
         case reasonCodes = "reason_codes"
         case studentFeedback = "student_feedback"
+        case correctness
+        case hints
+        case revealAnswer = "reveal_answer"
+        case correctAnswerExplain = "correct_answer_explain"
     }
 }
 
@@ -24,16 +34,21 @@ final class TriangleAIChecker {
     }
 
     func check(
+        learnerId: String,
+        questionId: String,
         conceptId: String,
         promptText: String,
         assessmentContract: AssessmentContract,
         rightAngleAt: String?,
+        diagramSpec: TriangleDiagramSpec?,
+        diagramCues: [DiagramCue]?,
         submittedChoiceId: String?,
         submittedNumericValue: String?,
+        submittedText: String?,
         combinedPNGBase64: String,
         mergedImagePath: String?
     ) async -> ResultEnvelope {
-        guard let url = URL(string: AppConfig.aiCheckBaseURL + "api/triangles/check") else {
+        guard let url = URL(string: AppConfig.aiCheckBaseURL + "api/triangles/grade") else {
             return ResultEnvelope(result: mockResult(combinedPNGBase64: combinedPNGBase64), statusCode: nil, didFallback: true)
         }
 
@@ -44,23 +59,21 @@ final class TriangleAIChecker {
         request.setValue("no-cache", forHTTPHeaderField: "Pragma")
         request.cachePolicy = .reloadIgnoringLocalCacheData
         let payload: [String: Any?] = [
+            "learner_id": learnerId,
+            "question_id": questionId,
             "concept_id": conceptId,
             "prompt_text": promptText,
             "interaction_type": assessmentContract.interactionType,
-            "response_mode": assessmentContract.interactionType,
-            "right_angle_at": rightAngleAt,
-            "merged_image_path": mergedImagePath,
-            "combined_png_base64": combinedPNGBase64,
-            "expected_answer_value": assessmentContract.expectedAnswer.value,
-            "submitted_choice_id": submittedChoiceId,
-            "submitted_numeric_value": submittedNumericValue,
             "assessment_contract": assessmentContractDictionary(from: assessmentContract),
-            "feedback_contract": feedbackContractDictionary(from: assessmentContract.feedbackContract),
-            "question_context": questionContextDictionary(
-                promptText: promptText,
-                assessmentContract: assessmentContract,
-                rightAngleAt: rightAngleAt
-            )
+            "diagram_spec": diagramSpecDictionary(from: diagramSpec, rightAngleAt: rightAngleAt),
+            "diagram_cues": diagramCuesDictionary(from: diagramCues),
+            "student_response": [
+                "combined_png_base64": combinedPNGBase64,
+                "submitted_choice_id": submittedChoiceId,
+                "submitted_numeric_value": submittedNumericValue,
+                "submitted_text": submittedText,
+                "merged_image_path": mergedImagePath
+            ]
         ]
         let requestData = try? JSONSerialization.data(withJSONObject: payload, options: [])
         request.httpBody = requestData
@@ -122,6 +135,34 @@ final class TriangleAIChecker {
         ]
     }
 
+    private func diagramSpecDictionary(from spec: TriangleDiagramSpec?, rightAngleAt: String?) -> [String: Any]? {
+        guard let spec else { return nil }
+        let points = spec.points.map { ["id": $0.key, "x": $0.value.x, "y": $0.value.y] }
+        return [
+            "type": "triangle",
+            "points_normalized": points,
+            "right_angle_at": rightAngleAt ?? NSNull()
+        ]
+    }
+
+    private func diagramCuesDictionary(from cues: [DiagramCue]?) -> [[String: Any]]? {
+        guard let cues, !cues.isEmpty else { return nil }
+        return cues.map { cue in
+            var result: [String: Any] = [
+                "type": cue.type,
+                "entity_kind": cue.entityKind,
+                "target_id": cue.targetId
+            ]
+            if let text = cue.text {
+                result["text"] = text
+            }
+            if let salience = cue.salience {
+                result["salience"] = salience
+            }
+            return result
+        }
+    }
+
     private func assessmentContractDictionary(from contract: AssessmentContract) -> [String: Any] {
         var result: [String: Any] = [
             "schema_version": contract.schemaVersion,
@@ -152,6 +193,17 @@ final class TriangleAIChecker {
                 partial[pair.key] = "<base64-redacted len=\((pair.value as? String)?.count ?? 0)>"
                 return
             }
+            if pair.key == "student_response", let response = pair.value as? [String: Any?] {
+                let redacted = response.reduce(into: [String: Any]()) { nested, nestedPair in
+                    if nestedPair.key == "combined_png_base64" {
+                        nested[nestedPair.key] = "<base64-redacted len=\((nestedPair.value as? String)?.count ?? 0)>"
+                    } else {
+                        nested[nestedPair.key] = nestedPair.value ?? NSNull()
+                    }
+                }
+                partial[pair.key] = redacted
+                return
+            }
             partial[pair.key] = pair.value ?? NSNull()
         }
         print("[AICheck][Request] url=\(url.absoluteString)")
@@ -180,18 +232,31 @@ final class TriangleAIChecker {
         if !combinedPNGBase64.isEmpty {
             return TriangleAICheckResult(
                 detectedSegment: "AB",
+                detectedTargetClass: "segments",
                 ambiguityScore: 0.25,
                 confidence: 0.75,
                 reasonCodes: ["MOCK_MODE"],
-                studentFeedback: "*(AI check - mock)* I can see a circle near one side. Re-check the prompt and side labels."
+                studentFeedback: "*(AI check - mock)* I can see a circle near one side. Re-check the prompt and side labels.",
+                correctness: "incorrect",
+                hints: [
+                    "Look for the right clue in the diagram and match it to the prompt.",
+                    "Choose one clear target and try again."
+                ],
+                revealAnswer: false,
+                correctAnswerExplain: nil
             )
         }
         return TriangleAICheckResult(
             detectedSegment: nil,
+            detectedTargetClass: nil,
             ambiguityScore: 1.0,
             confidence: 0.0,
             reasonCodes: ["MOCK_MODE", "EMPTY_INPUT"],
-            studentFeedback: "*(AI check - mock)* I couldn't read the drawing."
+            studentFeedback: "*(AI check - mock)* I couldn't read the drawing.",
+            correctness: "ambiguous",
+            hints: ["Circle just one target clearly so I can see it."],
+            revealAnswer: false,
+            correctAnswerExplain: nil
         )
     }
 }

@@ -28,6 +28,12 @@ struct StubQuestionProvider: TriangleQuestionProviding {
                     vertexLabels: ["A": "A", "B": "B", "C": "C"],
                     rightAngleAt: "C"
                 ),
+                diagramCues: [
+                    DiagramCue(type: "label", entityKind: "vertex", targetId: "A", text: "A", salience: "medium"),
+                    DiagramCue(type: "label", entityKind: "vertex", targetId: "B", text: "B", salience: "medium"),
+                    DiagramCue(type: "label", entityKind: "vertex", targetId: "C", text: "C", salience: "medium"),
+                    DiagramCue(type: "right_angle_marker", entityKind: "vertex", targetId: "C", text: nil, salience: "high")
+                ],
                 answer: TriangleAnswer(value: template.answer),
                 conceptId: conceptId,
                 difficulty: cappedDifficulty,

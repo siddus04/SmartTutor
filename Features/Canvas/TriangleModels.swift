@@ -13,6 +13,7 @@ struct TriangleResponse: Codable {
 struct TriangleBase: Codable {
     let tutorMessages: [TriangleTutorMessage]
     let diagramSpec: TriangleDiagramSpec?
+    let diagramCues: [DiagramCue]?
     let answer: TriangleAnswer?
     let conceptId: String?
     let difficulty: Int?
@@ -28,6 +29,7 @@ struct TriangleBase: Codable {
     enum CodingKeys: String, CodingKey {
         case tutorMessages = "tutor_messages"
         case diagramSpec = "diagram_spec"
+        case diagramCues = "diagram_cues"
         case answer
         case conceptId = "concept_id"
         case difficulty
@@ -44,6 +46,7 @@ struct TriangleBase: Codable {
     init(
         tutorMessages: [TriangleTutorMessage],
         diagramSpec: TriangleDiagramSpec?,
+        diagramCues: [DiagramCue]? = nil,
         answer: TriangleAnswer?,
         conceptId: String? = nil,
         difficulty: Int? = nil,
@@ -58,6 +61,7 @@ struct TriangleBase: Codable {
     ) {
         self.tutorMessages = tutorMessages
         self.diagramSpec = diagramSpec
+        self.diagramCues = diagramCues
         self.answer = answer
         self.conceptId = conceptId
         self.difficulty = difficulty
@@ -95,6 +99,22 @@ struct TriangleDiagramSpec: Codable {
     }
 }
 
+struct DiagramCue: Codable {
+    let type: String
+    let entityKind: String
+    let targetId: String
+    let text: String?
+    let salience: String?
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case entityKind = "entity_kind"
+        case targetId = "target_id"
+        case text
+        case salience
+    }
+}
+
 struct TrianglePoint: Codable {
     let x: Double
     let y: Double
@@ -128,6 +148,7 @@ struct QuestionSpec: Codable {
     let interactionType: String
     let difficultyMetadata: DifficultyMetadata
     let diagramSpec: DiagramSpec
+    let diagramCues: [DiagramCue]?
     let prompt: String
     let assessmentContract: AssessmentContract
     let responseContract: ResponseContract
@@ -144,6 +165,7 @@ struct QuestionSpec: Codable {
         case interactionType = "interaction_type"
         case difficultyMetadata = "difficulty_metadata"
         case diagramSpec = "diagram_spec"
+        case diagramCues = "diagram_cues"
         case prompt
         case assessmentContract = "assessment_contract"
         case responseContract = "response_contract"

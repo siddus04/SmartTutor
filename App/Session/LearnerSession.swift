@@ -139,6 +139,29 @@ struct SessionMeta: Codable, Equatable {
     let schemaVersion: Int
     let createdAtISO8601: String
     var lastOpenedAtISO8601: String
+    let learnerId: String
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case createdAtISO8601
+        case lastOpenedAtISO8601
+        case learnerId
+    }
+
+    init(schemaVersion: Int, createdAtISO8601: String, lastOpenedAtISO8601: String, learnerId: String = UUID().uuidString) {
+        self.schemaVersion = schemaVersion
+        self.createdAtISO8601 = createdAtISO8601
+        self.lastOpenedAtISO8601 = lastOpenedAtISO8601
+        self.learnerId = learnerId
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try c.decode(Int.self, forKey: .schemaVersion)
+        createdAtISO8601 = try c.decode(String.self, forKey: .createdAtISO8601)
+        lastOpenedAtISO8601 = try c.decode(String.self, forKey: .lastOpenedAtISO8601)
+        learnerId = try c.decodeIfPresent(String.self, forKey: .learnerId) ?? UUID().uuidString
+    }
 }
 
 struct LearnerSession: Codable, Equatable {

@@ -137,6 +137,7 @@ enum TriangleAdapter {
                     vertexLabels: labels,
                     rightAngleAt: spec.diagramSpec.rightAngleAt
                 ),
+                diagramCues: spec.diagramCues,
                 answer: TriangleAnswer(value: spec.responseContract.answer.value),
                 conceptId: spec.conceptId,
                 difficulty: ratedDifficulty,

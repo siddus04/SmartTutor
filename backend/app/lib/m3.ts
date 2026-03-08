@@ -17,6 +17,13 @@ export type QuestionSpec = {
     points_normalized: Array<{ id: "A" | "B" | "C"; x: number; y: number }>;
     right_angle_at?: "A" | "B" | "C" | null;
   };
+  diagram_cues?: Array<{
+    type: string;
+    entity_kind: "vertex" | "segment" | "angle" | "region";
+    target_id: string;
+    text?: string;
+    salience?: "low" | "medium" | "high";
+  }>;
   prompt: string;
   assessment_contract: {
     schema_version: "m3.assessment_contract.v1";
@@ -369,6 +376,23 @@ export function validateQuestionSpec(spec: QuestionSpec, allowedInteractionTypes
   if (!["A", "B", "C"].every((id) => ids.has(id as "A" | "B" | "C"))) errors.push("diagram_points");
   if (spec.diagram_spec.points_normalized.some((p) => p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1)) errors.push("diagram_bounds");
   if (triangleArea(spec) <= 0.001) errors.push("diagram_degenerate");
+  if (spec.diagram_cues != null) {
+    if (!Array.isArray(spec.diagram_cues)) {
+      errors.push("diagram_cues_schema");
+    } else {
+      for (const cue of spec.diagram_cues) {
+        if (!cue || typeof cue !== "object") {
+          errors.push("diagram_cues_schema");
+          continue;
+        }
+        if (typeof (cue as any).type !== "string") errors.push("diagram_cues_schema");
+        if (typeof (cue as any).entity_kind !== "string") errors.push("diagram_cues_schema");
+        if (typeof (cue as any).target_id !== "string") errors.push("diagram_cues_schema");
+        if ((cue as any).text != null && typeof (cue as any).text !== "string") errors.push("diagram_cues_schema");
+        if ((cue as any).salience != null && typeof (cue as any).salience !== "string") errors.push("diagram_cues_schema");
+      }
+    }
+  }
 
   if (!spec.assessment_contract) {
     errors.push("assessment_contract_missing");
@@ -513,7 +537,7 @@ export async function generateWithLLM(input: {
   if (!process.env.OPENAI_API_KEY) return fallback;
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const conceptContractText = buildConceptContractText(input);
-  const prompt = `You are SmartTutor's Grade-6 K12 geometry tutor.\nReturn strict JSON only.\nTopic scope: Triangles up to Pythagoras.\nNo trig, no formal proofs, no surds/irrational roots.\nUse concept_id=${input.conceptId}, grade=${input.grade}.\nAllowed interaction types: ${input.allowedInteractionTypes.join(",")}.\nDiagram target taxonomy for highlight interactions: ${DIAGRAM_TARGET_CLASSES.join(",")}.\nTarget band: ${JSON.stringify(input.targetBand ?? null)}. Target direction: ${input.targetDirection ?? "null"}.\n${conceptContractText}\nSchema keys required: schema_version,question_id,question_family,concept_id,grade,interaction_type,difficulty_metadata,diagram_spec,prompt,assessment_contract,response_contract,hint,explanation,real_world_connection.`;
+  const prompt = `You are SmartTutor's Grade-6 K12 geometry tutor.\nReturn strict JSON only.\nTopic scope: Triangles up to Pythagoras.\nNo trig, no formal proofs, no surds/irrational roots.\nUse concept_id=${input.conceptId}, grade=${input.grade}.\nAllowed interaction types: ${input.allowedInteractionTypes.join(",")}.\nDiagram target taxonomy for highlight interactions: ${DIAGRAM_TARGET_CLASSES.join(",")}.\nTarget band: ${JSON.stringify(input.targetBand ?? null)}. Target direction: ${input.targetDirection ?? "null"}.\n${conceptContractText}\nSchema keys required: schema_version,question_id,question_family,concept_id,grade,interaction_type,difficulty_metadata,diagram_spec,diagram_cues,prompt,assessment_contract,response_contract,hint,explanation,real_world_connection.`;
 
   try {
     const response = await client.responses.create({
@@ -857,6 +881,12 @@ function makeFallbackSpec(conceptId: string, interactionType: string, difficulty
       ],
       right_angle_at: "C"
     },
+    diagram_cues: [
+      { type: "label", entity_kind: "vertex", target_id: "A", text: "A", salience: "medium" },
+      { type: "label", entity_kind: "vertex", target_id: "B", text: "B", salience: "medium" },
+      { type: "label", entity_kind: "vertex", target_id: "C", text: "C", salience: "medium" },
+      { type: "right_angle_marker", entity_kind: "vertex", target_id: "C", salience: "high" }
+    ],
     prompt,
     assessment_contract: assessmentContract,
     response_contract: {

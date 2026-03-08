@@ -191,7 +191,13 @@ private actor LearnerContextStore {
     private var recentQuestionFamilies: [String] = []
 
     init() {
-        restore()
+        if let payload = Self.loadPayload() {
+            recentConceptIds = payload.recentConceptIds
+            recentPromptHashes = payload.recentPromptHashes
+            recentInteractionTypes = payload.recentInteractionTypes
+            recentExpectedAnswers = payload.recentExpectedAnswers
+            recentQuestionFamilies = payload.recentQuestionFamilies
+        }
     }
 
     func snapshot() -> LearnerContextPayload {
@@ -246,14 +252,9 @@ private actor LearnerContextStore {
         UserDefaults.standard.set(data, forKey: Self.storageKey)
     }
 
-    private func restore() {
-        guard let data = UserDefaults.standard.data(forKey: Self.storageKey),
-              let payload = try? JSONDecoder().decode(LearnerContextPayload.self, from: data) else { return }
-        recentConceptIds = payload.recentConceptIds
-        recentPromptHashes = payload.recentPromptHashes
-        recentInteractionTypes = payload.recentInteractionTypes
-        recentExpectedAnswers = payload.recentExpectedAnswers
-        recentQuestionFamilies = payload.recentQuestionFamilies
+    private static func loadPayload() -> LearnerContextPayload? {
+        guard let data = UserDefaults.standard.data(forKey: Self.storageKey) else { return nil }
+        return try? JSONDecoder().decode(LearnerContextPayload.self, from: data)
     }
 
     private func normalizedExpectedAnswer(from questionSpec: QuestionSpec) -> String {

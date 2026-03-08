@@ -20,6 +20,7 @@ struct CanvasSandboxView: View {
     private let accentColor = Color(red: 0.32, green: 0.64, blue: 0.66)
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var latestBase: TriangleBase?
+    @State private var latestQuestionId: String?
     @State private var canvasResetID = UUID()
     @State private var selectedSegment: String?
     @State private var selectedChoiceId: String?
@@ -57,6 +58,7 @@ struct CanvasSandboxView: View {
                         TutorPane(
                             accentColor: accentColor,
                             latestBase: $latestBase,
+                            latestQuestionId: $latestQuestionId,
                             messages: $messages,
                             onGenerateQuestion: { await generateDeterministicQuestion() },
                             onRunMasterySimulation: { runMasterySimulator() },
@@ -98,6 +100,7 @@ struct CanvasSandboxView: View {
                         TutorPane(
                             accentColor: accentColor,
                             latestBase: $latestBase,
+                            latestQuestionId: $latestQuestionId,
                             messages: $messages,
                             onGenerateQuestion: { await generateDeterministicQuestion() },
                             onRunMasterySimulation: { runMasterySimulator() },
@@ -231,6 +234,7 @@ struct CanvasSandboxView: View {
             await MainActor.run {
                 messages = [ChatMessage(text: "🎉 You completed Triangles M2 progression.", isAssistant: true)]
                 latestBase = nil
+                latestQuestionId = nil
             }
             appendLog("Progression completed: no further concepts.")
             return nil
@@ -251,18 +255,15 @@ struct CanvasSandboxView: View {
         }
     }
 
-    private func updateMasteryAfterCheck(expected: String, detected: String?, ambiguity: Double) {
+    private func updateMasteryAfterGrade(correctness: String?, ambiguity: Double) {
         guard let session = sessionStore.session else { return }
         let conceptId = latestBase?.conceptId ?? session.progression.currentConceptId
         guard let conceptId else { return }
 
-        let normalizedExpected = normalizeSegmentLabel(expected)
-        let normalizedDetected = normalizeSegmentLabel(detected)
-
         let outcome: MasteryOutcome
-        if ambiguity >= 0.6 || detected == nil {
+        if correctness == "ambiguous" || ambiguity >= 0.6 {
             outcome = .ambiguous
-        } else if normalizedDetected == normalizedExpected {
+        } else if correctness == "correct" {
             outcome = .correct
         } else {
             outcome = .incorrect
@@ -308,6 +309,15 @@ struct CanvasSandboxView: View {
             messages.append(ChatMessage(text: "No question to check yet.", isAssistant: true))
             return
         }
+        guard let session = sessionStore.session else {
+            messages.append(ChatMessage(text: "No learner session found.", isAssistant: true))
+            return
+        }
+        guard let questionId = latestQuestionId else {
+            messages.append(ChatMessage(text: "No question id found yet.", isAssistant: true))
+            return
+        }
+        let learnerId = session.sessionMeta.learnerId
         let interactionType = base.assessmentContract?.interactionType ?? base.responseMode ?? base.interactionType ?? "highlight"
         if interactionType == "highlight" && canvasController.canvasView == nil {
             messages.append(ChatMessage(text: "No question to check yet.", isAssistant: true))
@@ -324,7 +334,7 @@ struct CanvasSandboxView: View {
         startThinkingAnimation()
 
         Task {
-            let envelope = await runAICheck(base: base)
+            let envelope = await runAICheck(base: base, learnerId: learnerId, questionId: questionId)
             await MainActor.run {
                 stopThinkingAnimation()
                 removeThinkingMessage()
@@ -341,13 +351,20 @@ struct CanvasSandboxView: View {
 
             let result = envelope.result
             await streamAssistantMessage(result.studentFeedback)
+            if let hints = result.hints, !hints.isEmpty {
+                for hint in hints {
+                    await streamAssistantMessage(hint)
+                }
+            }
+            if result.revealAnswer == true, let explain = result.correctAnswerExplain {
+                await streamAssistantMessage(explain)
+            }
 
-            let expected = base.assessmentContract?.expectedAnswer.value ?? base.answer?.value ?? "AB"
             let interactionType = base.assessmentContract?.interactionType ?? base.responseMode ?? base.interactionType ?? "highlight"
             let isVisualMode = interactionType == "highlight"
-            let isCorrect = isSubmissionCorrect(base: base, result: result)
+            let isCorrect = result.correctness == "correct"
 
-            if let detected = result.detectedSegment, result.ambiguityScore < 0.6 {
+            if result.detectedSegment != nil, result.ambiguityScore < 0.6 {
                 let followUp = isCorrect ? "✅ Correct" : "❌ Try again"
                 await MainActor.run {
                     messages.append(ChatMessage(text: followUp, isAssistant: true))
@@ -357,16 +374,18 @@ struct CanvasSandboxView: View {
                     }
                 }
                 await MainActor.run {
-                    updateMasteryAfterCheck(expected: expected, detected: detected, ambiguity: result.ambiguityScore)
+                    updateMasteryAfterGrade(correctness: result.correctness, ambiguity: result.ambiguityScore)
                 }
             } else {
                 await MainActor.run {
-                    messages.append(ChatMessage(text: "I can’t tell which side you circled—try circling just ONE side clearly.", isAssistant: true))
+                    if result.ambiguityScore >= 0.6 {
+                        messages.append(ChatMessage(text: "I can’t tell which target you selected—try marking just ONE target clearly.", isAssistant: true))
+                    }
                     if isVisualMode {
                         canvasController.clear()
                         clearCurrentVisualAttempt()
                     }
-                    updateMasteryAfterCheck(expected: expected, detected: result.detectedSegment, ambiguity: result.ambiguityScore)
+                    updateMasteryAfterGrade(correctness: result.correctness, ambiguity: result.ambiguityScore)
                 }
             }
 
@@ -391,40 +410,27 @@ struct CanvasSandboxView: View {
         selectionDebugInfo = nil
     }
 
-    private func isSubmissionCorrect(base: TriangleBase, result: TriangleAICheckResult) -> Bool {
-        let contract = base.assessmentContract ?? fallbackAssessmentContract(from: base)
-
-        switch contract.interactionType {
-        case "multiple_choice":
-            return result.detectedSegment == contract.expectedAnswer.value
-        case "numeric_input":
-            guard
-                let expected = Double(contract.expectedAnswer.value),
-                let submittedText = result.detectedSegment,
-                let submitted = Double(submittedText)
-            else { return false }
-            let tolerance = contract.numericRule?.tolerance ?? 0
-            return abs(submitted - expected) <= abs(tolerance)
-        default:
-            return normalizeSegmentLabel(result.detectedSegment) == normalizeSegmentLabel(contract.expectedAnswer.value)
-        }
-    }
-
-    private func runAICheck(base: TriangleBase) async -> TriangleAIChecker.ResultEnvelope? {
+    private func runAICheck(base: TriangleBase, learnerId: String, questionId: String) async -> TriangleAIChecker.ResultEnvelope? {
 #if os(iOS)
         let checker = TriangleAIChecker()
         let contract = base.assessmentContract ?? fallbackAssessmentContract(from: base)
         let submittedChoiceId = contract.interactionType == "multiple_choice" ? selectedChoiceId : nil
         let submittedNumericValue = contract.interactionType == "numeric_input" ? numericSubmissionValue : nil
+        let submittedText: String? = nil
 
         if contract.interactionType != "highlight" {
             return await checker.check(
+                learnerId: learnerId,
+                questionId: questionId,
                 conceptId: base.conceptId ?? contract.conceptId,
                 promptText: base.promptText ?? base.tutorMessages.first?.text ?? "",
                 assessmentContract: contract,
                 rightAngleAt: base.diagramSpec?.rightAngleAt,
+                diagramSpec: base.diagramSpec,
+                diagramCues: base.diagramCues,
                 submittedChoiceId: submittedChoiceId,
                 submittedNumericValue: submittedNumericValue,
+                submittedText: submittedText,
                 combinedPNGBase64: "",
                 mergedImagePath: nil
             )
@@ -442,21 +448,6 @@ struct CanvasSandboxView: View {
         }
         let flattened = await MainActor.run {
             VisionPipeline.flattenOnWhite(submission)
-        }
-
-        let gate = VisionPipeline.shouldCallVision(inkDrawing: canvasView.drawing, renderedImage: flattened)
-        if !gate.ok {
-            return TriangleAIChecker.ResultEnvelope(
-                result: TriangleAICheckResult(
-                    detectedSegment: nil,
-                    ambiguityScore: 1.0,
-                    confidence: 0.0,
-                    reasonCodes: gate.reasons,
-                    studentFeedback: "I can’t see a clear mark yet. Try circling or marking more clearly."
-                ),
-                statusCode: nil,
-                didFallback: false
-            )
         }
 
         let ts = TriangleSnapshotter.timestampString()
@@ -501,12 +492,17 @@ struct CanvasSandboxView: View {
         appendLog("Payload mime=\(encoded.mime) bytes=\(encoded.byteCount)")
 
         return await checker.check(
+            learnerId: learnerId,
+            questionId: questionId,
             conceptId: base.conceptId ?? contract.conceptId,
             promptText: base.promptText ?? base.tutorMessages.first?.text ?? "",
             assessmentContract: contract,
             rightAngleAt: base.diagramSpec?.rightAngleAt,
+            diagramSpec: base.diagramSpec,
+            diagramCues: base.diagramCues,
             submittedChoiceId: submittedChoiceId,
             submittedNumericValue: submittedNumericValue,
+            submittedText: submittedText,
             combinedPNGBase64: encoded.base64,
             mergedImagePath: combinedPath
         )
@@ -762,6 +758,7 @@ private struct TutorPane: View {
     @State private var didFailToGenerate = false
     let accentColor: Color
     @Binding var latestBase: TriangleBase?
+    @Binding var latestQuestionId: String?
     @Binding var messages: [ChatMessage]
     let onGenerateQuestion: () async -> TriangleResponse?
     let onRunMasterySimulation: () -> Void
@@ -920,6 +917,7 @@ private struct TutorPane: View {
                 ChatMessage(text: $0.text, isAssistant: $0.role != "user")
             }
             latestBase = response.base
+            latestQuestionId = response.bundleId
             onQuestionLoaded()
         } else {
             if latestBase == nil {

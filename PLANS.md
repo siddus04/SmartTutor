@@ -198,6 +198,24 @@
 - `SmartTutorTests/M3ValidationTests.swift`
 - `PLANS.md`
 
+---
+**Implementation notes (2026-03-08 — AI grading + contextual feedback):**
+- Files touched:
+  - `backend/app/api/triangles/grade/route.ts`
+  - `backend/app/lib/attemptStore.ts`
+  - `backend/app/lib/m3.ts`
+  - `Features/Canvas/TriangleAIChecker.swift`
+  - `Features/Canvas/CanvasSandboxView.swift`
+  - `Features/Canvas/TriangleModels.swift`
+  - `Features/Canvas/ValidatedLLMQuestionProvider.swift`
+  - `Features/Canvas/StubQuestionProvider.swift`
+  - `App/Session/LearnerSession.swift`
+  - `PLANS.md`
+- Manual test steps:
+  1. Generate a highlight question; submit a wrong visual mark twice and confirm the second feedback reveals the correct answer explanation.
+  2. Submit a correct visual mark; verify correctness is accepted and mastery updates.
+  3. Generate a multiple-choice or numeric question; submit a wrong answer and confirm contextual AI feedback returns.
+  4. Confirm the app continues to render diagrams deterministically and does not crash on grading requests.
 **Manual test steps:**
 1. Disable stub mode (`AppConfig.useStubQuestionProvider = false`) and generate a question; verify accepted candidate renders and grading flow still works.
 2. Force malformed/invalid `QuestionSpec` from backend; verify retries occur and final fallback returns stub question with no crash.
