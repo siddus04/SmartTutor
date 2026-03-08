@@ -151,12 +151,16 @@ export async function POST(request: Request) {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   let parsed: any = null;
   try {
-    const content: Array<{ type: "input_text" | "input_image"; text?: string; image_url?: string; detail?: "low" | "high" }> = [
-      { type: "input_text", text: GRADE_PROMPT },
-      { type: "input_text", text: JSON.stringify(payload) }
+    const content = [
+      { type: "input_text" as const, text: GRADE_PROMPT },
+      { type: "input_text" as const, text: JSON.stringify(payload) }
     ];
     if (combinedBase64) {
-      content.push({ type: "input_image", image_url: `data:image/png;base64,${combinedBase64}`, detail: "high" });
+      content.push({
+        type: "input_image" as const,
+        image_url: `data:image/png;base64,${combinedBase64}`,
+        detail: "high" as const
+      });
     }
 
     const response = await client.responses.create({
